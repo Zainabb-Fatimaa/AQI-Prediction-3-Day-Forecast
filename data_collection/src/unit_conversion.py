@@ -79,45 +79,46 @@ def standardize_row(row, source):
     if row.get('city', '').lower() != 'karachi':
         return row
     # Set source column
-    if source in ['aqicn', 'openweather']:
+    if source in ['aqicn', 'openweather', 'airvisual']:
         row['source'] = 'merged'
+        # Convert PM2.5/PM10 AQI to concentration
+        if 'pm2_5' in row and row['pm2_5'] is not None:
+            row['pm2_5'] = aqi_to_ugm3(row['pm2_5'], PM25_BREAKPOINTS)
+        if 'pm10' in row and row['pm10'] is not None:
+            row['pm10'] = aqi_to_ugm3(row['pm10'], PM10_BREAKPOINTS)
+        # Wind speed to km/h
+        if 'wind_speed' in row and row['wind_speed'] is not None:
+            row['wind_speed'] = row['wind_speed'] * 3.6
+        # Gaseous pollutants assumed in ppb/ppm
+        # No conversion needed
     elif source == 'open-meteo':
         row['source'] = 'open-meteo'
-    # AQICN: Convert PM2.5/PM10 AQI to μg/m³
-    if source == 'aqicn':
-        if 'pm25' in row:
-            row['pm25_ugm3'] = aqi_to_ugm3(row['pm25'], PM25_BREAKPOINTS)
-        if 'pm10' in row:
-            row['pm10_ugm3'] = aqi_to_ugm3(row['pm10'], PM10_BREAKPOINTS)
-        for gas in ['co', 'no2', 'so2', 'o3']:
-            if gas in row:
-                row[f'{gas}_ppb'] = row[gas]  # Assume already in ppb/ppm
-    # OpenWeather: wind speed (m/s) to km/h, wind direction as-is
-    if source == 'openweather':
-        if 'wind_speed' in row:
-            row['wind_speed_kmh'] = row['wind_speed'] * 3.6
-        if 'wind_direction' in row:
-            row['wind_direction_deg'] = row['wind_direction']
-    # Open-Meteo: assume already in correct units
+        # Map Open-Meteo names to standard
+        if 'carbon_monoxide' in row:
+            row['co'] = convert_gas_ugm3_to_ppb(row['carbon_monoxide'], 'carbon_monoxide')
+        if 'nitrogen_dioxide' in row:
+            row['no2'] = convert_gas_ugm3_to_ppb(row['nitrogen_dioxide'], 'nitrogen_dioxide')
+        if 'sulphur_dioxide' in row:
+            row['so2'] = convert_gas_ugm3_to_ppb(row['sulphur_dioxide'], 'sulphur_dioxide')
+        if 'ozone' in row:
+            row['o3'] = convert_gas_ugm3_to_ppb(row['ozone'], 'ozone')
+        # Wind speed to km/h
+        if 'wind_speed' in row and row['wind_speed'] is not None:
+            row['wind_speed'] = row['wind_speed'] * 3.6
+        # PM2.5/PM10 already in concentration
     # --- Calculate AQI for all pollutants if possible ---
-    # PM2.5
-    if 'pm25_ugm3' in row:
-        row['aqi_pm25'] = calculate_epa_aqi('PM2.5', row['pm25_ugm3'], 'ug/m3')
-    # PM10
-    if 'pm10_ugm3' in row:
-        row['aqi_pm10'] = calculate_epa_aqi('PM10', row['pm10_ugm3'], 'ug/m3')
-    # CO (assume CO in ppm if present)
-    if 'co_ppb' in row:
-        row['aqi_co'] = calculate_epa_aqi('CO', row['co_ppb'] / 1000, 'ppm')
-    # SO2
-    if 'so2_ppb' in row:
-        row['aqi_so2'] = calculate_epa_aqi('SO2', row['so2_ppb'], 'ppb')
-    # O3
-    if 'o3_ppb' in row:
-        row['aqi_o3'] = calculate_epa_aqi('O3', row['o3_ppb'], 'ppb')
-    # NO2
-    if 'no2_ppb' in row:
-        row['aqi_no2'] = calculate_epa_aqi('NO2', row['no2_ppb'], 'ppb')
+    if 'pm2_5' in row and row['pm2_5'] is not None:
+        row['aqi_pm25'] = calculate_epa_aqi('PM2.5', row['pm2_5'], 'ug/m3')
+    if 'pm10' in row and row['pm10'] is not None:
+        row['aqi_pm10'] = calculate_epa_aqi('PM10', row['pm10'], 'ug/m3')
+    if 'co' in row and row['co'] is not None:
+        row['aqi_co'] = calculate_epa_aqi('CO', row['co'] / 1000, 'ppm')
+    if 'so2' in row and row['so2'] is not None:
+        row['aqi_so2'] = calculate_epa_aqi('SO2', row['so2'], 'ppb')
+    if 'o3' in row and row['o3'] is not None:
+        row['aqi_o3'] = calculate_epa_aqi('O3', row['o3'], 'ppb')
+    if 'no2' in row and row['no2'] is not None:
+        row['aqi_no2'] = calculate_epa_aqi('NO2', row['no2'], 'ppb')
     # Overall AQI
     aqi_fields = [row.get('aqi_pm25'), row.get('aqi_pm10'), row.get('aqi_co'), row.get('aqi_so2'), row.get('aqi_o3'), row.get('aqi_no2')]
     aqi_fields = [aqi for aqi in aqi_fields if aqi is not None and not np.isnan(aqi)]
