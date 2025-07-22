@@ -34,10 +34,10 @@ jobs:
         run: echo "HOPSWORKS_API_KEY=${{ secrets.HOPSWORKS_API_KEY }}" >> $GITHUB_ENV
 
       - name: Download aqi_data.csv from Hopsworks
-        run: python main.py preload
+        run: python data_collection/main.py preload
 
       - name: Run AQI data collection and append new data
-        run: python main.py collect
+        run: python data_collection/main.py collect
 
       - name: Upload database artifact
         uses: actions/upload-artifact@v4
