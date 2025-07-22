@@ -8,7 +8,6 @@ on:
 
 jobs:
   aqi_hourly:
-    if: github.event.schedule == '0 * * * *'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -32,7 +31,6 @@ jobs:
         run: python data_collection/hourly_aqi_pipeline.py
 
   openmeteo_daily:
-    if: github.event.schedule == '5 0 * * *'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
