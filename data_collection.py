@@ -13,7 +13,7 @@ import pandas as pd
 import requests_cache
 from retry_requests import retry
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Setup the Open-Meteo API client with cache and retry on error
 cache_session = requests_cache.CachedSession('.cache', expire_after = 3600)
@@ -40,17 +40,21 @@ if already_ran_today():
 
 update_run_log()
 
+# Calculate yesterday's date
+YESTERDAY = (datetime.utcnow() - timedelta(days=1)).date()
+YESTERDAY_STR = YESTERDAY.strftime('%Y-%m-%d')
+
 # Make sure all required weather variables are listed here
 # The order of variables in hourly or daily is important to assign them correctly below
 url = "https://air-quality-api.open-meteo.com/v1/air-quality"
 params = {
-        "latitude": 24.8608,
-        "longitude": 67.0104,
-        "hourly": ["pm10", "pm2_5", "carbon_monoxide", "carbon_dioxide", "nitrogen_dioxide", "sulphur_dioxide", "ozone"],
-        "current": ["pm10", "pm2_5", "carbon_monoxide", "nitrogen_dioxide", "sulphur_dioxide", "ozone"],
-        "timezone": "Pacific/Auckland",
-        "past_days": 92,
-        "forecast_days": 1
+    "latitude": 24.8608,
+    "longitude": 67.0104,
+    "start_date": YESTERDAY_STR,
+    "end_date": YESTERDAY_STR,
+    "hourly": ["pm10", "pm2_5", "carbon_monoxide", "carbon_dioxide", "nitrogen_dioxide", "sulphur_dioxide", "ozone"],
+    "current": ["pm10", "pm2_5", "carbon_monoxide", "nitrogen_dioxide", "sulphur_dioxide", "ozone"],
+    "timezone": "UTC"
 }
 responses = openmeteo.weather_api(url, params=params)
 
@@ -259,10 +263,10 @@ url = "https://archive-api.open-meteo.com/v1/archive"
 params = {
         "latitude": 24.8608,
         "longitude": 67.0104,
-        "start_date": "2025-04-16",
-        "end_date": "2025-07-17",
+        "start_date": YESTERDAY_STR,
+        "end_date": YESTERDAY_STR,
         "hourly": ["temperature_2m", "relative_humidity_2m", "rain", "wind_speed_10m", "wind_direction_10m", "wind_speed_100m", "wind_direction_100m"],
-        "timezone": "Pacific/Auckland"
+        "timezone": "UTC"
 }
 
 # Make the API request
@@ -376,8 +380,11 @@ merged_dataframe.rename(columns={
 # Print updated columns
 print(merged_dataframe.columns)
 
-# Save the merged dataframe to a CSV file with all columns
-merged_dataframe.to_csv('karachi_merged_data_aqi.csv', index=False)
+# When saving, append to historical CSV
+if os.path.exists('karachi_merged_data_aqi.csv'):
+    merged_dataframe.to_csv('karachi_merged_data_aqi.csv', mode='a', header=False, index=False)
+else:
+    merged_dataframe.to_csv('karachi_merged_data_aqi.csv', index=False)
 
 df=pd.read_csv('karachi_merged_data_aqi.csv')
 
@@ -401,14 +408,11 @@ df=pd.read_csv('karachi_merged_data_aqi.csv')
 
 
 
-!pip install "hopsworks[python]"
-
-!pip install confluent-kafka
-
 import pandas as pd
 import hopsworks
 from hsfs.feature import Feature
 from hsfs.feature_group import FeatureGroup
+import os
 
 # Step 1: Define final features
 final_features = [
@@ -429,11 +433,13 @@ final_df.columns = [col.lower() for col in final_df.columns]
 final_df.rename(columns={'pm2.5': 'pm2_5', 'pm10': 'pm10'}, inplace=True)
 
 # Step 5: Upload raw feature set to Resources (optional)
-project = hopsworks.login()
-fs = project.get_feature_store()
-dataset_api = project.get_dataset_api()
-final_df.to_csv("karachi_merged_data_aqi.csv", index=False)
-dataset_api.upload("karachi_merged_data_aqi.csv", "Resources", overwrite=True)
+# Download existing CSV if available
+if os.path.exists("karachi_merged_data_aqi.csv"):
+    old_df = pd.read_csv("karachi_merged_data_aqi.csv")
+    combined_df = pd.concat([old_df, final_df]).drop_duplicates(subset=["date_str"])
+else:
+    combined_df = final_df.copy()
+combined_df.to_csv("karachi_merged_data_aqi.csv", index=False)
 
 # Step 6: Convert numeric columns to float64
 numeric_cols = [
@@ -441,14 +447,14 @@ numeric_cols = [
     'hour', 'day', 'weekday', 'pm2_5', 'pm10',
     'co', 'so2', 'o3', 'no2', 'aqi'
 ]
-final_df[numeric_cols] = final_df[numeric_cols].astype('float64')
+combined_df[numeric_cols] = combined_df[numeric_cols].astype('float64')
 
 # Step 7: Convert 'date' column to Python date objects
-final_df['date'] = pd.to_datetime(final_df['date']).dt.date
+combined_df['date'] = pd.to_datetime(combined_df['date']).dt.date
 
 # Step 8: Define schema
 feature_group_schema = (
-    [Feature(name=col, type="double") for col in final_df.select_dtypes(include='number').columns if col != "date"] +
+    [Feature(name=col, type="double") for col in combined_df.select_dtypes(include='number').columns if col != "date"] +
     [Feature(name="date", type="date")] +
     [Feature(name="date_str", type="string")]
 )
@@ -474,11 +480,16 @@ except Exception as e:
         online_enabled=True
     )
 
-# Insert data
-if fg is not None:
-    print(fg)
-    fg.insert(final_df, write_options={"wait_for_job": True})
-    print(fg._feature_group_engine.__class__.__name__)
-else:
-    print("Feature group creation failed. Please check your Hopsworks connection and parameters.")
+# Read existing feature group data and append only new records
+try:
+    fg_hist = fg.read()
+    fg_hist["date_str"] = fg_hist["date_str"].astype(str)
+    new_records = combined_df[~combined_df["date_str"].isin(fg_hist["date_str"])]
+    if not new_records.empty:
+        fg.insert(new_records, write_options={"wait_for_job": True})
+        print(f"Inserted {len(new_records)} new records into feature group.")
+    else:
+        print("No new records to insert into feature group.")
+except Exception as e:
+    print(f"Error reading/inserting feature group: {e}")
 
