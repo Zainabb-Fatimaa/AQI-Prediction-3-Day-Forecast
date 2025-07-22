@@ -1,0 +1,12 @@
+hopsworks[python]
+pandas==2.1.4
+numpy==1.26.4
+requests
+python-dotenv
+tabulate
+pytest
+pyarrow
+fastparquet
+scikit-learn
+scipy
+confluent-kafka

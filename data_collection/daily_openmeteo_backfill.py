@@ -1,0 +1,115 @@
+import os
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+import hopsworks
+import openmeteo_requests
+import requests_cache
+from retry_requests import retry
+from src.unit_conversion import standardize_row
+
+# Hopsworks setup
+HOPSWORKS_API_KEY = os.getenv("HOPSWORKS_API_KEY")
+HOPSWORKS_PROJECT = os.getenv("HOPSWORKS_PROJECT")
+project = hopsworks.login(project=HOPSWORKS_PROJECT, api_key_value=HOPSWORKS_API_KEY)
+fs = project.get_feature_store()
+fg = fs.get_or_create_feature_group(
+    name="karachi_aqi_hourly",
+    version=1,
+    description="Hourly AQI and weather for Karachi, standardized units",
+    primary_key=["city", "timestamp"],
+    event_time="timestamp",
+    online_enabled=True
+)
+
+def fetch_open_meteo_data(lat, lon, start, end):
+    cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
+    retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
+    openmeteo = openmeteo_requests.Client(session=retry_session)
+
+    url = "https://air-quality-api.open-meteo.com/v1/air-quality"
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "hourly": [
+            "pm10", "pm2_5", "carbon_monoxide", "carbon_dioxide",
+            "nitrogen_dioxide", "sulphur_dioxide", "ozone"
+        ],
+        "timezone": "UTC",
+        "start_date": str(start),
+        "end_date": str(end)
+    }
+    responses = openmeteo.weather_api(url, params=params)
+    response = responses[0]
+
+    hourly = response.Hourly()
+    hourly_data = {
+        "timestamp": pd.date_range(
+            start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+            end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+            freq=pd.Timedelta(seconds=hourly.Interval()),
+            inclusive="left"
+        ),
+        "pm10": hourly.Variables(0).ValuesAsNumpy(),
+        "pm2_5": hourly.Variables(1).ValuesAsNumpy(),
+        "carbon_monoxide": hourly.Variables(2).ValuesAsNumpy(),
+        "carbon_dioxide": hourly.Variables(3).ValuesAsNumpy(),
+        "nitrogen_dioxide": hourly.Variables(4).ValuesAsNumpy(),
+        "sulphur_dioxide": hourly.Variables(5).ValuesAsNumpy(),
+        "ozone": hourly.Variables(6).ValuesAsNumpy(),
+    }
+    df = pd.DataFrame(hourly_data)
+    df["city"] = "Karachi"
+    df = df.apply(lambda row: standardize_row(row, source="open-meteo"), axis=1)
+    return df
+
+def compare_and_overwrite(openmeteo_df, fg, threshold=2):
+    fg_df = fg.read()
+    fg_df = fg_df[fg_df["city"].str.lower() == "karachi"]
+    fg_df["timestamp"] = pd.to_datetime(fg_df["timestamp"])
+    openmeteo_df["timestamp"] = pd.to_datetime(openmeteo_df["timestamp"])
+
+    merged = pd.merge(
+        openmeteo_df,
+        fg_df,
+        on="timestamp",
+        how="left",
+        suffixes=("_openmeteo", "_api")
+    )
+
+    fields = ["pm25_ugm3", "pm10_ugm3", "co_ppb", "no2_ppb", "so2_ppb", "o3_ppb"]
+    result_rows = []
+    for _, row in merged.iterrows():
+        new_row = row.filter(like="_openmeteo").to_dict()
+        new_row = {k.replace("_openmeteo", ""): v for k, v in new_row.items()}
+        overwrite = False
+        for field in fields:
+            openmeteo_val = row.get(f"{field}_openmeteo")
+            api_val = row.get(f"{field}_api")
+            if pd.notnull(api_val) and pd.notnull(openmeteo_val):
+                try:
+                    diff = abs(api_val - openmeteo_val)
+                except Exception:
+                    diff = None
+                if diff is not None and diff > threshold:
+                    new_row[field] = api_val
+                    overwrite = True
+        new_row["source"] = "api_client" if overwrite else "open_meteo"
+        result_rows.append(new_row)
+    result_df = pd.DataFrame(result_rows)
+    fg.insert(result_df, write_options={"wait_for_job": True})
+
+def daily_backfill():
+    city = "Karachi"
+    lat, lon = 24.8608, 67.0104
+    today = datetime.utcnow().date()
+    yesterday = today - timedelta(days=1)
+    df_hist = fetch_open_meteo_data(lat, lon, start=yesterday, end=today)
+    if not df_hist.empty:
+        compare_and_overwrite(df_hist, fg, threshold=2)
+        print("Open-Meteo backfill and overwrite complete for", yesterday)
+    else:
+        print("No Open-Meteo data for", yesterday)
+
+if __name__ == "__main__":
+    daily_backfill()
