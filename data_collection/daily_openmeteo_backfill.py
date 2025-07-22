@@ -77,14 +77,16 @@ def append_to_csv(df, csv_path):
         'hour', 'day', 'weekday', 'pm2_5', 'pm10',
         'co', 'so2', 'o3', 'no2', 'aqi', 'date', 'source'
     ]
-    # Standardize column names
+    # Standardize column names before saving
     df.rename(columns={
-        'PM2.5': 'pm2_5', 'pm2.5': 'pm2_5', 'PM10': 'pm10', 'pm10': 'pm10',
-        'CO': 'co', 'co': 'co', 'SO2': 'so2', 'so2': 'so2',
-        'O3': 'o3', 'o3': 'o3', 'NO2': 'no2', 'no2': 'no2',
-        'AQI': 'aqi', 'aqi': 'aqi'
+        'PM2.5': 'pm2_5', 'pm2.5': 'pm2_5', 'PM25': 'pm2_5', 'PM10': 'pm10', 'pm10': 'pm10',
+        'CO': 'co', 'SO2': 'so2', 'O3': 'o3', 'NO2': 'no2', 'AQI': 'aqi'
     }, inplace=True)
     df.columns = [col.lower() for col in df.columns]
+    # Ensure all required columns are present
+    for col in required_cols:
+        if col not in df.columns:
+            df[col] = None
     dir_name = os.path.dirname(csv_path)
     if dir_name:
         os.makedirs(dir_name, exist_ok=True)
@@ -92,15 +94,16 @@ def append_to_csv(df, csv_path):
     if os.path.exists(csv_path):
         existing = pd.read_csv(csv_path)
         existing.rename(columns={
-            'PM2.5': 'pm2_5', 'pm2.5': 'pm2_5', 'PM10': 'pm10', 'pm10': 'pm10',
-            'CO': 'co', 'co': 'co', 'SO2': 'so2', 'so2': 'so2',
-            'O3': 'o3', 'o3': 'o3', 'NO2': 'no2', 'no2': 'no2',
-            'AQI': 'aqi', 'aqi': 'aqi'
+            'PM2.5': 'pm2_5', 'pm2.5': 'pm2_5', 'PM25': 'pm2_5', 'PM10': 'pm10', 'pm10': 'pm10',
+            'CO': 'co', 'SO2': 'so2', 'O3': 'o3', 'NO2': 'no2', 'AQI': 'aqi'
         }, inplace=True)
         existing.columns = [col.lower() for col in existing.columns]
+        for col in required_cols:
+            if col not in existing.columns:
+                existing[col] = None
         # Add source column if missing
         if 'source' not in existing.columns:
-            existing['source'] = 'unknown'
+            existing['source'] = 'open-meteo'
         combined = pd.concat([existing, df], ignore_index=True)
         combined = combined[[col for col in required_cols if col in combined.columns]]
         combined.drop_duplicates(subset=["date"], keep="last", inplace=True)
@@ -108,7 +111,7 @@ def append_to_csv(df, csv_path):
     else:
         # Add source column if missing
         if 'source' not in df.columns:
-            df['source'] = 'unknown'
+            df['source'] = 'open-meteo'
         df = df[[col for col in required_cols if col in df.columns]]
         df.to_csv(csv_path, index=False)
 
