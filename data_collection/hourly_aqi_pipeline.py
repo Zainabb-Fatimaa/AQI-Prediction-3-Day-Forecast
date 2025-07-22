@@ -14,6 +14,7 @@ def append_to_csv(df, csv_path):
     dir_name = os.path.dirname(csv_path)
     if dir_name:
         os.makedirs(dir_name, exist_ok=True)
+    # Always fetch the latest historical data before appending
     if os.path.exists(csv_path):
         existing = pd.read_csv(csv_path)
         existing = existing[[col for col in required_cols if col in existing.columns]]
