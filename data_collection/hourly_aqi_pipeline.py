@@ -49,7 +49,7 @@ def collect_and_store():
         if 'date' in df.columns:
             df['date'] = pd.to_datetime(df['date'], errors='coerce')
         local_csv = "karachi_merged_data_aqi.csv"
-        hopsworks_csv = "resources/karachi_merged_data_aqi.csv"
+        hopsworks_csv = "Resources/karachi_merged_data_aqi.csv"
         append_to_csv(df, local_csv)
         append_to_csv(df, hopsworks_csv)
         print("Inserted hourly data for", now)

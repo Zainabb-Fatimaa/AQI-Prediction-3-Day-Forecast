@@ -8,7 +8,7 @@ from retry_requests import retry
 from src.unit_conversion import standardize_row
 
 CSV_PATH_LOCAL = "karachi_merged_data_aqi.csv"
-CSV_PATH_HOPS = "resources/karachi_merged_data_aqi.csv"
+CSV_PATH_HOPS = "Resources/karachi_merged_data_aqi.csv"
 
 
 def fetch_open_meteo_data(lat, lon, start, end):
