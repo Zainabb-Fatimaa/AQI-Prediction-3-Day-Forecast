@@ -15,7 +15,7 @@ from retry_requests import retry
 import os
 from datetime import datetime, timedelta
 import logging
-from hopsworks import login
+import hopsworks
 from hsfs.feature import Feature
 from hsfs.feature_group import FeatureGroup
 
@@ -36,7 +36,7 @@ RAW_DATA_PATH = "Resources/karachi_merged_data_aqi.csv"
 
 # --- Hopsworks Connection ---
 logger.info("Connecting to Hopsworks...")
-project = hopsworks.login(project=HOPSWORKS_PROJECT, api_key_value=HOPSWORKS_API_KEY)
+project = hopsworks.login()
 fs = project.get_feature_store()
 dataset_api = project.get_dataset_api()
 
