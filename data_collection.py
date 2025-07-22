@@ -14,6 +14,28 @@ import requests_cache
 from retry_requests import retry
 import os
 from datetime import datetime, timedelta
+import logging
+
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+logger = logging.getLogger("DailyFeaturePipeline")
+
+# --- Environment Variables ---
+HOPSWORKS_API_KEY = os.getenv("HOPSWORKS_API_KEY")
+HOPSWORKS_PROJECT = os.getenv("HOPSWORKS_PROJECT")
+assert HOPSWORKS_API_KEY, "HOPSWORKS_API_KEY must be set."
+assert HOPSWORKS_PROJECT, "HOPSWORKS_PROJECT must be set."
+
+FEATURE_GROUP_NAME = "karachi_raw_data_store"
+FEATURE_GROUP_VERSION = 1
+PRIMARY_KEY = ["date_str"]
+RAW_DATA_PATH = "Resources/karachi_merged_data_aqi.csv"
+
+# --- Hopsworks Connection ---
+logger.info("Connecting to Hopsworks...")
+project = hopsworks.login(project=HOPSWORKS_PROJECT, api_key_value=HOPSWORKS_API_KEY)
+fs = project.get_feature_store()
+dataset_api = project.get_dataset_api()
 
 # Setup the Open-Meteo API client with cache and retry on error
 cache_session = requests_cache.CachedSession('.cache', expire_after = 3600)
@@ -27,7 +49,7 @@ def already_ran_today():
         with open(RUN_LOG, "r") as f:
             last_run = f.read().strip()
             if last_run == datetime.now().strftime("%Y-%m-%d"):
-                print("Script already ran today.")
+                logger.info("Script already ran today.")
                 return True
     return False
 
@@ -381,7 +403,7 @@ merged_dataframe.rename(columns={
 print(merged_dataframe.columns)
 
 # When saving, append to historical CSV
-if os.path.exists('karachi_merged_data_aqi.csv'):
+if os.path.exists('Resources/'):
     merged_dataframe.to_csv('karachi_merged_data_aqi.csv', mode='a', header=False, index=False)
 else:
     merged_dataframe.to_csv('karachi_merged_data_aqi.csv', index=False)

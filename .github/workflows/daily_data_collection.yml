@@ -24,37 +24,33 @@ jobs:
           pip install hopsworks pandas
 
       - name: Set up environment variables
-        run: echo "${{ secrets.ENV_FILE }}" > .env
-
-      - name: Set Hopsworks API key
-        run: echo "HOPSWORKS_API_KEY=${{ secrets.HOPSWORKS_API_KEY }}" >> $GITHUB_ENV
-
-      - name: Set Hopsworks Project
-        run: echo "HOPSWORKS_PROJECT=${{ secrets.HOPSWORKS_PROJECT }}" >> $GITHUB_ENV
-
-      - name: Download historical CSV from Hopsworks
         run: |
-          python -c "import hopsworks, os; project = hopsworks.login(api_key=os.getenv('HOPSWORKS_API_KEY'), project=os.getenv('HOPSWORKS_PROJECT')); dataset_api = project.get_dataset_api(); dataset_api.download('Resources/karachi_merged_data_aqi.csv', 'karachi_merged_data_aqi.csv', overwrite=True)"
+          echo "HOPSWORKS_API_KEY=${{ secrets.HOPSWORKS_API_KEY }}" >> $GITHUB_ENV
+          echo "HOPSWORKS_PROJECT=${{ secrets.HOPSWORKS_PROJECT }}" >> $GITHUB_ENV
+
+      - name: Download karachi_merged_data_aqi.csv from Hopsworks
+        run: |
+          python -c "import hopsworks; project = hopsworks.login(); dataset_api = project.get_dataset_api(); dataset_api.download('Resources/karachi_merged_data_aqi.csv', 'karachi_merged_data_aqi.csv', overwrite=True)"
 
       - name: Download feature group from Hopsworks
         run: |
-          python -c "import hopsworks, os; project = hopsworks.login(api_key=os.environ['HOPSWORKS_API_KEY'], project=os.environ['HOPSWORKS_PROJECT']); fs = project.get_feature_store(); fg = fs.get_feature_group(name='karachi_raw_data_store', version=1); df = fg.read(); df.to_csv('feature_group_data.csv', index=False)"
+          python -c "import hopsworks, os; project = hopsworks.login(); fs = project.get_feature_store(); fg = fs.get_feature_group(name='karachi_raw_data_store', version=1); df = fg.read(); df.to_csv('feature_group_data.csv', index=False)"
 
       - name: Run data collection script
         run: python data_collection.py
 
       - name: Append new data to karachi_merged_data_aqi.csv
         run: |
-          python -c "import pandas as pd; old = pd.read_csv('karachi_merged_data_aqi.csv'); new = pd.read_csv('karachi_merged_data_aqi.csv', skiprows=len(old)+1); merged = pd.concat([old, new]).drop_duplicates(); merged.to_csv('karachi_merged_data_aqi.csv', index=False)"
+          python -c "import pandas as pd; old = pd.read_csv('karachi_merged_data_aqi.csv'); new = pd.read_csv('karachi_merged_data_aqi.csv', skiprows=len(old)+1); merged = pd.concat([old, new]).drop_duplicates(subset=['date_str']); merged.to_csv('karachi_merged_data_aqi.csv', index=False)"
 
       - name: Append new data to feature group
         run: |
-          python -c "import pandas as pd; fg_hist = pd.read_csv('feature_group_data.csv'); new = pd.read_csv('karachi_merged_data_aqi.csv'); merged_fg = pd.concat([fg_hist, new]).drop_duplicates(); merged_fg.to_csv('feature_group_data.csv', index=False)"
+          python -c "import pandas as pd; fg_hist = pd.read_csv('feature_group_data.csv'); new = pd.read_csv('karachi_merged_data_aqi.csv'); merged_fg = pd.concat([fg_hist, new]).drop_duplicates(subset=['date_str']); merged_fg.to_csv('feature_group_data.csv', index=False)"
 
       - name: Upload updated karachi_merged_data_aqi.csv to Hopsworks
         run: |
-          python -c "import hopsworks, os; project = hopsworks.login(api_key=os.environ['HOPSWORKS_API_KEY'], project=os.environ['HOPSWORKS_PROJECT']); dataset_api = project.get_dataset_api(); dataset_api.upload('karachi_merged_data_aqi.csv', 'Resources', overwrite=True)"
+          python -c "import hopsworks, os; project = hopsworks.login(); dataset_api = project.get_dataset_api(); dataset_api.upload('karachi_merged_data_aqi.csv', 'Resources', overwrite=True)"
 
       - name: Upload updated feature group to Hopsworks
         run: |
-          python -c "import hopsworks, os, pandas as pd; project = hopsworks.login(api_key=os.environ['HOPSWORKS_API_KEY'], project=os.environ['HOPSWORKS_PROJECT']); fs = project.get_feature_store(); fg = fs.get_feature_group(name='karachi_raw_data_store', version=1); merged_fg = pd.read_csv('feature_group_data.csv'); fg.insert(merged_fg, write_options={'wait_for_job': True})"
+          python -c "import hopsworks, os, pandas as pd; project = hopsworks.login(); fs = project.get_feature_store(); fg = fs.get_feature_group(name='karachi_raw_data_store', version=1); merged_fg = pd.read_csv('feature_group_data.csv'); fg.insert(merged_fg, write_options={'wait_for_job': True})"
