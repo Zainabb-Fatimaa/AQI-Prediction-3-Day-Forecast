@@ -405,11 +405,18 @@ merged_dataframe.rename(columns={
 # Print updated columns
 print(merged_dataframe.columns)
 
-# When saving, append to historical CSV
-if os.path.exists('Resources/'):
-    merged_dataframe.to_csv('karachi_merged_data_aqi.csv', mode='a', header=False, index=False)
+# Save new data to a separate file
+new_data_path = "new_data.csv"
+final_df.to_csv(new_data_path, index=False)
+
+# Merge historical and new data
+if os.path.exists("karachi_merged_data_aqi.csv"):
+    old_df = pd.read_csv("karachi_merged_data_aqi.csv")
+    new_df = pd.read_csv(new_data_path)
+    merged_df = pd.concat([old_df, new_df]).drop_duplicates(subset=["date_str"])
 else:
-    merged_dataframe.to_csv('karachi_merged_data_aqi.csv', index=False)
+    merged_df = pd.read_csv(new_data_path)
+merged_df.to_csv("karachi_merged_data_aqi.csv", index=False)
 
 df=pd.read_csv('karachi_merged_data_aqi.csv')
 
