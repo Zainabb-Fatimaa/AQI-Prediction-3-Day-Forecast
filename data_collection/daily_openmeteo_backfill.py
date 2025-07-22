@@ -72,17 +72,44 @@ def fetch_open_meteo_data(lat, lon, start, end):
 
 
 def append_to_csv(df, csv_path):
+    required_cols = [
+        'temperature', 'humidity', 'wind_speed', 'wind_direction',
+        'hour', 'day', 'weekday', 'pm2_5', 'pm10',
+        'co', 'so2', 'o3', 'no2', 'aqi', 'date', 'source'
+    ]
+    # Standardize column names
+    df.rename(columns={
+        'PM2.5': 'pm2_5', 'pm2.5': 'pm2_5', 'PM10': 'pm10', 'pm10': 'pm10',
+        'CO': 'co', 'co': 'co', 'SO2': 'so2', 'so2': 'so2',
+        'O3': 'o3', 'o3': 'o3', 'NO2': 'no2', 'no2': 'no2',
+        'AQI': 'aqi', 'aqi': 'aqi'
+    }, inplace=True)
+    df.columns = [col.lower() for col in df.columns]
     dir_name = os.path.dirname(csv_path)
     if dir_name:
         os.makedirs(dir_name, exist_ok=True)
     # Always fetch the latest historical data before appending
     if os.path.exists(csv_path):
         existing = pd.read_csv(csv_path)
-        existing = existing[[col for col in required_cols if col in existing.columns]]
+        existing.rename(columns={
+            'PM2.5': 'pm2_5', 'pm2.5': 'pm2_5', 'PM10': 'pm10', 'pm10': 'pm10',
+            'CO': 'co', 'co': 'co', 'SO2': 'so2', 'so2': 'so2',
+            'O3': 'o3', 'o3': 'o3', 'NO2': 'no2', 'no2': 'no2',
+            'AQI': 'aqi', 'aqi': 'aqi'
+        }, inplace=True)
+        existing.columns = [col.lower() for col in existing.columns]
+        # Add source column if missing
+        if 'source' not in existing.columns:
+            existing['source'] = 'unknown'
         combined = pd.concat([existing, df], ignore_index=True)
+        combined = combined[[col for col in required_cols if col in combined.columns]]
         combined.drop_duplicates(subset=["date"], keep="last", inplace=True)
         combined.to_csv(csv_path, index=False)
     else:
+        # Add source column if missing
+        if 'source' not in df.columns:
+            df['source'] = 'unknown'
+        df = df[[col for col in required_cols if col in df.columns]]
         df.to_csv(csv_path, index=False)
 
 def compare_and_overwrite(openmeteo_df, threshold=2):
@@ -127,6 +154,9 @@ def compare_and_overwrite(openmeteo_df, threshold=2):
     result_df = result_df[[col for col in required_cols if col in result_df.columns]]
     # Update both CSVs
     for csv_path in [CSV_PATH_LOCAL, CSV_PATH_HOPS]:
+        dir_name = os.path.dirname(csv_path)
+        if dir_name:
+            os.makedirs(dir_name, exist_ok=True)
         if os.path.exists(csv_path):
             csv_df = pd.read_csv(csv_path)
             csv_df = csv_df[[col for col in required_cols if col in csv_df.columns]]
