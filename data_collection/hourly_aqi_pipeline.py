@@ -51,27 +51,20 @@ def collect_and_store():
         data_std = standardize_row(data, source="aqicn")  # or "openweather" if that's the source
         data_std['source'] = 'merged'
         df = pd.DataFrame([data_std])
-        df.rename(columns={'pm2.5': 'pm2_5', 'PM2.5': 'pm2_5', 'PM10': 'pm10'}, inplace=True)
+        df.rename(columns={'pm2.5': 'pm2_5', 'PM2.5': 'pm2_5', 'PM25': 'pm2_5', 'PM10': 'pm10', 'pm10': 'pm10',
+            'CO': 'co', 'SO2': 'so2', 'O3': 'o3', 'NO2': 'no2', 'AQI': 'aqi'}, inplace=True)
         df.columns = [col.lower() for col in df.columns]
         required_cols = [
             'temperature', 'humidity', 'wind_speed', 'wind_direction',
             'hour', 'day', 'weekday', 'pm2_5', 'pm10',
             'co', 'so2', 'o3', 'no2', 'aqi', 'date', 'source'
         ]
-        df = df[[col for col in required_cols if col in df.columns]]
-        numeric_cols = [
-            'temperature', 'humidity', 'wind_speed', 'wind_direction',
-            'hour', 'day', 'weekday', 'pm2_5', 'pm10',
-            'co', 'so2', 'o3', 'no2', 'aqi'
-        ]
-        for col in numeric_cols:
-            if col in df.columns:
-                df[col] = df[col].astype('float64')
+        for col in required_cols:
+            if col not in df.columns:
+                df[col] = None
         if 'date' in df.columns:
             df['date'] = pd.to_datetime(df['date'], errors='coerce')
-        local_csv = "karachi_merged_data_aqi.csv"
-        hopsworks_csv = "resources/karachi_merged_data_aqi.csv"
-        append_to_csv(df, local_csv)
+        hopsworks_csv = "Resources/karachi_merged_data_aqi.csv"
         append_to_csv(df, hopsworks_csv)
         print("Inserted hourly data for", now)
     else:

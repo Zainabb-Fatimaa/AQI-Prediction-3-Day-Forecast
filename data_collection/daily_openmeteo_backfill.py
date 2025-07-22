@@ -7,7 +7,7 @@ import requests_cache
 from retry_requests import retry
 from src.unit_conversion import standardize_row
 
-CSV_PATH_LOCAL = "karachi_merged_data_aqi.csv"
+CSV_PATH_LOCAL = "Resources/karachi_merged_data_aqi.csv"
 CSV_PATH_HOPS = "Resources/karachi_merged_data_aqi.csv"
 
 
