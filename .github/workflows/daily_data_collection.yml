@@ -3,6 +3,7 @@ name: Daily Data Collection
 on:
   schedule:
     - cron: '0 0 * * *'  # Runs at 00:00 UTC every day
+  workflow_dispatch:
 
 jobs:
   run_data_collection:
