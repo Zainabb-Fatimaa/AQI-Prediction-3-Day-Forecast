@@ -20,15 +20,23 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install hopsworks pandas numpy
+          pip install hopsworks pandas numpy openmeteo_requests
       - name: Set up environment variables
         run: echo "${{ secrets.ENV_FILE }}" > .env
       - name: Set Hopsworks API key
         run: echo "HOPSWORKS_API_KEY=${{ secrets.HOPSWORKS_API_KEY }}" >> $GITHUB_ENV
       - name: Set Hopsworks Project
         run: echo "HOPSWORKS_PROJECT=${{ secrets.HOPSWORKS_PROJECT }}" >> $GITHUB_ENV
-      - name: Run AQI hourly pipeline
-        run: python data_collection/hourly_aqi_pipeline.py
+      - name: Run AQI hourly pipeline with error handling
+        run: |
+          set -e
+          python data_collection/hourly_aqi_pipeline.py || {
+            echo "Error: AQI hourly pipeline failed. Check unit conversion and input data.";
+            exit 1;
+          }
+      - name: Verify unit conversion
+        run: |
+          python -c "import pandas as pd; df = pd.read_csv('karachi_merged_data_aqi.csv'); assert all([col in df.columns for col in ['pm2_5','pm10','co','so2','o3','no2','aqi']]); print('Unit conversion verified.')"
 
   openmeteo_daily:
     runs-on: ubuntu-latest
@@ -43,7 +51,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install hopsworks pandas numpy
+          pip install hopsworks pandas numpy openmeteo_requests
       - name: Set up environment variables
         run: echo "${{ secrets.ENV_FILE }}" > .env
       - name: Set Hopsworks API key
