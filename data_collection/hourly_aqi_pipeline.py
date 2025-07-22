@@ -11,11 +11,11 @@ HOPSWORKS_PROJECT = os.getenv("HOPSWORKS_PROJECT")
 project = hopsworks.login(project=HOPSWORKS_PROJECT, api_key_value=HOPSWORKS_API_KEY)
 fs = project.get_feature_store()
 fg = fs.get_or_create_feature_group(
-    name="karachi_aqi_hourly",
+    name="karachi_raw_data_store",
     version=1,
     description="Hourly AQI and weather for Karachi, standardized units",
-    primary_key=["city", "timestamp"],
-    event_time="timestamp",
+    primary_key=["date"],
+    event_time="date",
     online_enabled=True
 )
 
@@ -31,6 +31,13 @@ def initial_bulk_upload():
                 # Rename columns for Hopsworks compatibility
                 df.rename(columns={'pm2.5': 'pm2_5', 'PM2.5': 'pm2_5', 'PM10': 'pm10'}, inplace=True)
                 df.columns = [col.lower() for col in df.columns]
+                # Only keep required columns
+                required_cols = [
+                    'temperature', 'humidity', 'wind_speed', 'wind_direction',
+                    'hour', 'day', 'weekday', 'pm2_5', 'pm10',
+                    'co', 'so2', 'o3', 'no2', 'aqi', 'date'
+                ]
+                df = df[[col for col in required_cols if col in df.columns]]
                 # Convert numeric columns to float64
                 numeric_cols = [
                     'temperature', 'humidity', 'wind_speed', 'wind_direction',
@@ -40,14 +47,9 @@ def initial_bulk_upload():
                 for col in numeric_cols:
                     if col in df.columns:
                         df[col] = df[col].astype('float64')
-                # Add city and timestamp columns if missing
-                if 'city' not in df.columns:
-                    df['city'] = "Karachi"
-                if 'timestamp' not in df.columns and 'date' in df.columns:
-                    df['timestamp'] = pd.to_datetime(df['date'], errors='coerce')
-                # Ensure timestamp is datetime
-                if 'timestamp' in df.columns:
-                    df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+                # Ensure date is datetime
+                if 'date' in df.columns:
+                    df['date'] = pd.to_datetime(df['date'], errors='coerce')
                 fg.insert(df, write_options={"wait_for_job": True})
                 print(f"Uploaded {len(df)} historical rows to feature group.")
             else:
@@ -61,10 +63,18 @@ def initial_bulk_upload():
 def append_to_csv(df, csv_path):
     # Append new rows to the CSV, creating it if needed
     try:
+        # Only keep required columns
+        required_cols = [
+            'temperature', 'humidity', 'wind_speed', 'wind_direction',
+            'hour', 'day', 'weekday', 'pm2_5', 'pm10',
+            'co', 'so2', 'o3', 'no2', 'aqi', 'date'
+        ]
+        df = df[[col for col in required_cols if col in df.columns]]
         if os.path.exists(csv_path):
             existing = pd.read_csv(csv_path)
+            existing = existing[[col for col in required_cols if col in existing.columns]]
             combined = pd.concat([existing, df], ignore_index=True)
-            combined.drop_duplicates(subset=["timestamp"], keep="last", inplace=True)
+            combined.drop_duplicates(subset=["date"], keep="last", inplace=True)
             combined.to_csv(csv_path, index=False)
         else:
             df.to_csv(csv_path, index=False)
@@ -73,20 +83,24 @@ def append_to_csv(df, csv_path):
 
 
 def collect_and_store():
-    city = "Karachi"
     lat, lon = 24.8608, 67.0104
     now = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
     api_client = APIClient()
-    data = api_client.get_aqi_data(city, lat, lon)
+    data = api_client.get_aqi_data(None, lat, lon)
     if data:
-        data['city'] = city
-        data['timestamp'] = now
+        data['date'] = now
         data_std = standardize_row(data, source="aqicn")  # or "openweather" if that's the source
-        data_std['source'] = "api_client"
         df = pd.DataFrame([data_std])
         # Rename columns for Hopsworks compatibility
         df.rename(columns={'pm2.5': 'pm2_5', 'PM2.5': 'pm2_5', 'PM10': 'pm10'}, inplace=True)
         df.columns = [col.lower() for col in df.columns]
+        # Only keep required columns
+        required_cols = [
+            'temperature', 'humidity', 'wind_speed', 'wind_direction',
+            'hour', 'day', 'weekday', 'pm2_5', 'pm10',
+            'co', 'so2', 'o3', 'no2', 'aqi', 'date'
+        ]
+        df = df[[col for col in required_cols if col in df.columns]]
         numeric_cols = [
             'temperature', 'humidity', 'wind_speed', 'wind_direction',
             'hour', 'day', 'weekday', 'pm2_5', 'pm10',
@@ -95,9 +109,9 @@ def collect_and_store():
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = df[col].astype('float64')
-        # Ensure timestamp is datetime
-        if 'timestamp' in df.columns:
-            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        # Ensure date is datetime
+        if 'date' in df.columns:
+            df['date'] = pd.to_datetime(df['date'], errors='coerce')
         fg.insert(df, write_options={"wait_for_job": True})
         print("Inserted hourly data for", now)
         # Append to CSV (local and Hopsworks path)

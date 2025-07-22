@@ -14,11 +14,11 @@ HOPSWORKS_PROJECT = os.getenv("HOPSWORKS_PROJECT")
 project = hopsworks.login(project=HOPSWORKS_PROJECT, api_key_value=HOPSWORKS_API_KEY)
 fs = project.get_feature_store()
 fg = fs.get_or_create_feature_group(
-    name="karachi_aqi_hourly",
+    name="karachi_raw_data_store",
     version=1,
     description="Hourly AQI and weather for Karachi, standardized units",
-    primary_key=["city", "timestamp"],
-    event_time="timestamp",
+    primary_key=["date"],
+    event_time="date",
     online_enabled=True
 )
 
@@ -48,7 +48,7 @@ def fetch_open_meteo_data(lat, lon, start, end):
 
     hourly = response.Hourly()
     hourly_data = {
-        "timestamp": pd.date_range(
+        "date": pd.date_range(
             start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
             end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
             freq=pd.Timedelta(seconds=hourly.Interval()),
@@ -63,11 +63,17 @@ def fetch_open_meteo_data(lat, lon, start, end):
         "ozone": hourly.Variables(6).ValuesAsNumpy(),
     }
     df = pd.DataFrame(hourly_data)
-    df["city"] = "Karachi"
     df = df.apply(lambda row: standardize_row(row, source="open-meteo"), axis=1)
     # Standardize column names for feature group
     df.rename(columns={'pm2.5': 'pm2_5', 'PM2.5': 'pm2_5', 'PM10': 'pm10'}, inplace=True)
     df.columns = [col.lower() for col in df.columns]
+    # Only keep required columns
+    required_cols = [
+        'temperature', 'humidity', 'wind_speed', 'wind_direction',
+        'hour', 'day', 'weekday', 'pm2_5', 'pm10',
+        'co', 'so2', 'o3', 'no2', 'aqi', 'date'
+    ]
+    df = df[[col for col in required_cols if col in df.columns]]
     # Convert numeric columns to float64
     numeric_cols = [
         'temperature', 'humidity', 'wind_speed', 'wind_direction',
@@ -77,18 +83,26 @@ def fetch_open_meteo_data(lat, lon, start, end):
     for col in numeric_cols:
         if col in df.columns:
             df[col] = df[col].astype('float64')
-    # Ensure timestamp is datetime
-    if 'timestamp' in df.columns:
-        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+    # Ensure date is datetime
+    if 'date' in df.columns:
+        df['date'] = pd.to_datetime(df['date'], errors='coerce')
     return df
 
 
 def append_to_csv(df, csv_path):
     try:
+        # Only keep required columns
+        required_cols = [
+            'temperature', 'humidity', 'wind_speed', 'wind_direction',
+            'hour', 'day', 'weekday', 'pm2_5', 'pm10',
+            'co', 'so2', 'o3', 'no2', 'aqi', 'date'
+        ]
+        df = df[[col for col in required_cols if col in df.columns]]
         if os.path.exists(csv_path):
             existing = pd.read_csv(csv_path)
+            existing = existing[[col for col in required_cols if col in existing.columns]]
             combined = pd.concat([existing, df], ignore_index=True)
-            combined.drop_duplicates(subset=["timestamp"], keep="last", inplace=True)
+            combined.drop_duplicates(subset="date", keep="last", inplace=True)
             combined.to_csv(csv_path, index=False)
         else:
             df.to_csv(csv_path, index=False)
@@ -98,14 +112,13 @@ def append_to_csv(df, csv_path):
 
 def compare_and_overwrite(openmeteo_df, fg, threshold=2):
     fg_df = fg.read()
-    fg_df = fg_df[fg_df["city"].str.lower() == "karachi"]
-    fg_df["timestamp"] = pd.to_datetime(fg_df["timestamp"], errors='coerce')
-    openmeteo_df["timestamp"] = pd.to_datetime(openmeteo_df["timestamp"], errors='coerce')
+    fg_df["date"] = pd.to_datetime(fg_df["date"], errors='coerce')
+    openmeteo_df["date"] = pd.to_datetime(openmeteo_df["date"], errors='coerce')
 
     merged = pd.merge(
         openmeteo_df,
         fg_df,
-        on="timestamp",
+        on="date",
         how="left",
         suffixes=("_openmeteo", "_api")
     )
@@ -127,20 +140,27 @@ def compare_and_overwrite(openmeteo_df, fg, threshold=2):
                 if diff is not None and diff > threshold:
                     new_row[field] = api_val
                     overwrite = True
-        new_row["source"] = "api_client" if overwrite else "open_meteo"
         result_rows.append(new_row)
     result_df = pd.DataFrame(result_rows)
+    # Only keep required columns
+    required_cols = [
+        'temperature', 'humidity', 'wind_speed', 'wind_direction',
+        'hour', 'day', 'weekday', 'pm2_5', 'pm10',
+        'co', 'so2', 'o3', 'no2', 'aqi', 'date'
+    ]
+    result_df = result_df[[col for col in required_cols if col in result_df.columns]]
     fg.insert(result_df, write_options={"wait_for_job": True})
     # Append/overwrite only the affected day's rows in both CSVs
     for csv_path in [CSV_PATH_LOCAL, CSV_PATH_HOPS]:
         try:
             if os.path.exists(csv_path):
                 csv_df = pd.read_csv(csv_path)
-                result_dates = pd.to_datetime(result_df["timestamp"], errors='coerce').dt.date.unique()
-                csv_df["timestamp"] = pd.to_datetime(csv_df["timestamp"], errors='coerce')
-                csv_df = csv_df[~csv_df["timestamp"].dt.date.isin(result_dates)]
+                csv_df = csv_df[[col for col in required_cols if col in csv_df.columns]]
+                result_dates = pd.to_datetime(result_df["date"], errors='coerce').dt.date.unique()
+                csv_df["date"] = pd.to_datetime(csv_df["date"], errors='coerce')
+                csv_df = csv_df[~csv_df["date"].dt.date.isin(result_dates)]
                 combined = pd.concat([csv_df, result_df], ignore_index=True)
-                combined.drop_duplicates(subset=["timestamp"], keep="last", inplace=True)
+                combined.drop_duplicates(subset="date", keep="last", inplace=True)
                 combined.to_csv(csv_path, index=False)
             else:
                 result_df.to_csv(csv_path, index=False)
@@ -149,7 +169,6 @@ def compare_and_overwrite(openmeteo_df, fg, threshold=2):
 
 
 def daily_backfill():
-    city = "Karachi"
     lat, lon = 24.8608, 67.0104
     today = datetime.utcnow().date()
     yesterday = today - timedelta(days=1)
