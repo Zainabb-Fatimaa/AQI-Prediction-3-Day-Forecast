@@ -15,6 +15,9 @@ from retry_requests import retry
 import os
 from datetime import datetime, timedelta
 import logging
+from hopsworks import login
+from hsfs.feature import Feature
+from hsfs.feature_group import FeatureGroup
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
