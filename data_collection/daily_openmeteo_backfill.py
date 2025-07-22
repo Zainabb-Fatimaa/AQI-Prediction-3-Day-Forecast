@@ -8,7 +8,7 @@ from retry_requests import retry
 from src.unit_conversion import standardize_row
 
 CSV_PATH_LOCAL = "karachi_merged_data_aqi.csv"
-CSV_PATH_HOPS = "resources/karachi_merged_data_aqi.csv/karachi_merged_data_aqi.csv"
+CSV_PATH_HOPS = "resources/karachi_merged_data_aqi.csv"
 
 
 def fetch_open_meteo_data(lat, lon, start, end):
@@ -49,12 +49,13 @@ def fetch_open_meteo_data(lat, lon, start, end):
     }
     df = pd.DataFrame(hourly_data)
     df = df.apply(lambda row: standardize_row(row, source="open-meteo"), axis=1)
+    df['source'] = 'open-meteo'
     df.rename(columns={'pm2.5': 'pm2_5', 'PM2.5': 'pm2_5', 'PM10': 'pm10'}, inplace=True)
     df.columns = [col.lower() for col in df.columns]
     required_cols = [
         'temperature', 'humidity', 'wind_speed', 'wind_direction',
         'hour', 'day', 'weekday', 'pm2_5', 'pm10',
-        'co', 'so2', 'o3', 'no2', 'aqi', 'date'
+        'co', 'so2', 'o3', 'no2', 'aqi', 'date', 'source'
     ]
     df = df[[col for col in required_cols if col in df.columns]]
     numeric_cols = [
@@ -74,7 +75,7 @@ def append_to_csv(df, csv_path):
     required_cols = [
         'temperature', 'humidity', 'wind_speed', 'wind_direction',
         'hour', 'day', 'weekday', 'pm2_5', 'pm10',
-        'co', 'so2', 'o3', 'no2', 'aqi', 'date'
+        'co', 'so2', 'o3', 'no2', 'aqi', 'date', 'source'
     ]
     df = df[[col for col in required_cols if col in df.columns]]
     if os.path.exists(csv_path):

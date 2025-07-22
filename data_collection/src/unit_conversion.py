@@ -48,6 +48,8 @@ def calculate_epa_aqi(pollutant, concentration, unit):
     return np.nan
 
 def aqi_to_ugm3(aqi, breakpoints):
+    if aqi is None:
+        return None
     for c_low, c_high, i_low, i_high in breakpoints:
         if i_low <= aqi <= i_high:
             return ((aqi - i_low) * (c_high - c_low) / (i_high - i_low)) + c_low
@@ -76,13 +78,17 @@ def standardize_row(row, source):
     # Only for Karachi
     if row.get('city', '').lower() != 'karachi':
         return row
+    # Set source column
+    if source in ['aqicn', 'openweather']:
+        row['source'] = 'merged'
+    elif source == 'open-meteo':
+        row['source'] = 'open-meteo'
     # AQICN: Convert PM2.5/PM10 AQI to μg/m³
     if source == 'aqicn':
         if 'pm25' in row:
             row['pm25_ugm3'] = aqi_to_ugm3(row['pm25'], PM25_BREAKPOINTS)
         if 'pm10' in row:
             row['pm10_ugm3'] = aqi_to_ugm3(row['pm10'], PM10_BREAKPOINTS)
-        # Gaseous elements: pass through if already in ppb/ppm
         for gas in ['co', 'no2', 'so2', 'o3']:
             if gas in row:
                 row[f'{gas}_ppb'] = row[gas]  # Assume already in ppb/ppm
@@ -116,7 +122,7 @@ def standardize_row(row, source):
     aqi_fields = [row.get('aqi_pm25'), row.get('aqi_pm10'), row.get('aqi_co'), row.get('aqi_so2'), row.get('aqi_o3'), row.get('aqi_no2')]
     aqi_fields = [aqi for aqi in aqi_fields if aqi is not None and not np.isnan(aqi)]
     if aqi_fields:
-        row['aqi_overall'] = max(aqi_fields)
+        row['aqi'] = max(aqi_fields)
     # --- Temporal features ---
     row = extract_temporal_features(row)
-    return row 
+    return row
