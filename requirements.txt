@@ -10,3 +10,6 @@ fastparquet
 scikit-learn
 scipy
 confluent-kafka
+openmeteo-requests
+requests-cache
+retry-requests

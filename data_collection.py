@@ -7,8 +7,6 @@ Original file is located at
     https://colab.research.google.com/drive/1c9AuG23R9kVCS0AJ0dWm4ScAiSzUPfu_
 """
 
-!pip install openmeteo-requests requests-cache retry-requests numpy pandas hopsworks
-
 import openmeteo_requests
 
 import pandas as pd
