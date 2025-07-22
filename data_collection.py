@@ -185,7 +185,7 @@ if 'carbon_dioxide' in air_quality_dataframe.columns:
 
 
 # Display the updated dataframe with new columns
-display(air_quality_dataframe.head())
+print(air_quality_dataframe.head())
 
 import numpy as np
 import pandas as pd
@@ -341,7 +341,7 @@ hourly_dataframe['wind_speed_10m'] = hourly_dataframe['wind_speed_10m'] * 3.6
 hourly_dataframe['wind_speed_100m'] = hourly_dataframe['wind_speed_100m'] * 3.6
 
 # Display the updated dataframe
-display(hourly_dataframe.head())
+print(hourly_dataframe.head())
 
 # Extract hour, day, and weekday from the 'date' column
 hourly_dataframe['hour'] = hourly_dataframe['date'].dt.hour
@@ -357,14 +357,14 @@ hourly_dataframe['relative_humidity_2m_24h'] = hourly_dataframe['relative_humidi
 # Wind gust speed is not available in the current weather data, skipping this step.
 
 # Display the updated dataframe with new features
-display(hourly_dataframe.head())
-display(hourly_dataframe.tail())
+print(hourly_dataframe.head())
+print(hourly_dataframe.tail())
 
 # Merge the two dataframes on the 'date' column
 merged_dataframe = pd.merge(hourly_dataframe, air_quality_dataframe, on='date', how='inner')
 
 # Display the head of the merged dataframe
-display(merged_dataframe.head())
+print(merged_dataframe.head())
 
 print(merged_dataframe.columns)
 
