@@ -67,7 +67,8 @@ class APIClient:
     def _cache_key(self, city, timestamp=None):
         if not timestamp:
             timestamp = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
-        return f"{city.lower()}_{timestamp.isoformat()}"
+        city_str = city.lower() if city is not None else "unknown"
+        return f"{city_str}_{timestamp.isoformat()}"
 
     def _get_airvisual_data(self, city: str, latitude: float, longitude: float, api_key: str) -> Optional[Dict[str, Any]]:
         try:
