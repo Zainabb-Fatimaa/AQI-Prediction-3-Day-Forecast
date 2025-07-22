@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Simple AQI Data Collection System for Pakistani Cities.
+Simple AQI Data Collection System for Karachi.
 """
 
 import os
@@ -12,26 +12,12 @@ sys.path.append('src')
 
 from src.data_collector import get_data_collector
 
-# City configurations
-CITIES = {
-    "karachi": {
-        "latitude": 24.8607,
-        "longitude": 67.0011,
-        "state": "Sindh",
-        "country": "Pakistan"
-    },
-    "lahore": {
-        "latitude": 31.5204,
-        "longitude": 74.3587,
-        "state": "Punjab",
-        "country": "Pakistan"
-    },
-    "islamabad": {
-        "latitude": 33.6844,
-        "longitude": 73.0479,
-        "state": "Capital Territory",
-        "country": "Pakistan"
-    }
+# City configuration for Karachi only
+CITY = {
+    "latitude": 24.8607,
+    "longitude": 67.0011,
+    "state": "Sindh",
+    "country": "Pakistan"
 }
 
 def setup_environment():
@@ -65,9 +51,9 @@ def preload_from_hopsworks():
     try:
         project = hopsworks.login(api_key_value=api_key)
         dataset_api = project.get_dataset_api()
-        dataset_api.download("Resources/aqi_data.csv/aqi_data.csv", "aqi_data.csv", overwrite=True)
+        dataset_api.download("Resources/karachi_merged_data_aqi.csv/karachi_merged_data_aqi.csv", "karachi_merged_data_aqi.csv", overwrite=True)
 
-        df = pd.read_csv("aqi_data.csv")
+        df = pd.read_csv("karachi_merged_data_aqi.csv")
         os.makedirs("data", exist_ok=True)
         conn = sqlite3.connect("data/aqi_data.db")
         df.to_sql("aqi_data", conn, if_exists="replace", index=False)
@@ -93,8 +79,12 @@ def collect_data(aqicn_key=None, openweather_key=None, airvisual_key=None):
     print("=" * 60)
 
     collector = get_data_collector()
-    results = collector.collect_data_for_all_cities(
-        CITIES,
+    result = collector.collect_data_for_city(
+        "karachi",
+        CITY["latitude"],
+        CITY["longitude"],
+        CITY["state"],
+        CITY["country"],
         aqicn_key=aqicn_key,
         openweather_key=openweather_key,
         airvisual_key=airvisual_key
@@ -105,25 +95,94 @@ def collect_data(aqicn_key=None, openweather_key=None, airvisual_key=None):
     # Append new records to CSV
     from src.database import get_db_manager
     db_manager = get_db_manager()
-    csv_path = "Resources/aqi_data.csv"
+    csv_path = "Resources/karachi_merged_data_aqi.csv"
     os.makedirs("Resources", exist_ok=True)
     db_manager.export_all_aqi_data_to_csv(csv_path)
 
-    # Upload to Hopsworks
+    # Upload to Hopsworks Dataset storage and Feature Store
     import hopsworks
+    import pandas as pd
     api_key = os.environ.get("HOPSWORKS_API_KEY")
     if api_key:
         try:
             project = hopsworks.login(api_key_value=api_key)
             dataset_api = project.get_dataset_api()
-            dataset_api.upload(csv_path, "Resources/aqi_data.csv", overwrite=True)
-            print("✅ Uploaded AQI data CSV to Hopsworks Dataset storage.")
-        except Exception as e:
-            print(f"❌ Failed to upload to Hopsworks: {e}")
+            # Validate file path before upload
+            if os.path.isfile(csv_path):
+                dataset_api.upload(csv_path, "Resources/karachi_merged_data_aqi.csv", overwrite=True)
+                print("✅ Uploaded AQI data CSV to Hopsworks Dataset storage.")
+            else:
+                print("❌ CSV file not found for upload.")
+
+            # --- Feature group creation and insertion ---
+            df = pd.read_csv(csv_path)
+
+            # Rename columns for Hopsworks compatibility
+            df.rename(columns={'pm2.5': 'pm2_5', 'PM2.5': 'pm2_5', 'PM10': 'pm10'}, inplace=True)
+            df.columns = [col.lower() for col in df.columns]
+
+            # Convert numeric columns to float64
+            numeric_cols = [
+                'temperature', 'humidity', 'wind_speed', 'wind_direction',
+                'hour', 'day', 'weekday', 'pm2_5', 'pm10',
+                'co', 'so2', 'o3', 'no2', 'aqi'
+            ]
+            for col in numeric_cols:
+                if col in df.columns:
+                    df[col] = df[col].astype('float64')
+
+            # Convert 'date' column to Python date objects
+            if 'date' in df.columns:
+                df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.date
+
+            # Add string version of timestamp for online primary key
+            df["date_str"] = pd.to_datetime(df["date"], errors='coerce').astype(str)
+
+            from hsfs.feature import Feature
+            feature_group_schema = (
+                [Feature(name=col, type="double") for col in df.select_dtypes(include='number').columns if col != "date"] +
+                [Feature(name="date", type="date")] +
+                [Feature(name="date_str", type="string")]
+            )
+
+            fs = project.get_feature_store()
+            feature_group_name = "karachi_raw_data_store"
+            feature_group_version = 1
+
+            try:
+                fg = fs.get_feature_group(name=feature_group_name, version=feature_group_version)
+                if fg is None:
+                    raise Exception("Feature group not found, will create.")
+                print("Using existing feature group")
+            except Exception:
+                print("Creating new feature group")
+                fg = fs.create_feature_group(
+                    name=feature_group_name,
+                    version=feature_group_version,
+                    description="Final features for Karachi AQI model (online + offline)",
+                    primary_key=["date_str"],
+                    event_time="date",
+                    features=feature_group_schema,
+                    online_enabled=True
+                )
+
+            # Insert data
+            if fg is not None:
+                print(fg)
+                try:
+                    fg.insert(df, write_options={"wait_for_job": True})
+                    print(fg._feature_group_engine.__class__.__name__)
+                except Exception:
+                    print("❌ Feature group insert failed.")
+            else:
+                print("Feature group creation failed. Please check your Hopsworks connection and parameters.")
+
+        except Exception:
+            print("❌ Failed to upload to Hopsworks.")
     else:
         print("HOPSWORKS_API_KEY not set. Skipping upload to Hopsworks.")
 
-    return results
+    return result
 
 def show_latest_data():
     print("=" * 60)
@@ -131,20 +190,19 @@ def show_latest_data():
     print("=" * 60)
 
     collector = get_data_collector()
-    latest_data = collector.get_latest_data_for_all_cities(CITIES)
+    data = collector.get_latest_data_for_city("karachi")
 
-    for city, data in latest_data.items():
-        if data:
-            print(f"\n{city.upper()}:")
-            print(f"  AQI: {data.get('aqi', 'N/A')}")
-            print(f"  PM2.5: {data.get('pm25', 'N/A')} μg/m³")
-            print(f"  PM10: {data.get('pm10', 'N/A')} μg/m³")
-            print(f"  Temperature: {data.get('temperature', 'N/A')}°C")
-            print(f"  Humidity: {data.get('humidity', 'N/A')}%")
-            print(f"  Source: {data.get('source', 'N/A')}")
-            print(f"  Timestamp: {data.get('timestamp', 'N/A')}")
-        else:
-            print(f"\n{city.upper()}: No data available")
+    if data:
+        print(f"\nKARACHI:")
+        print(f"  AQI: {data.get('aqi', 'N/A')}")
+        print(f"  PM2.5: {data.get('pm25', 'N/A')} μg/m³")
+        print(f"  PM10: {data.get('pm10', 'N/A')} μg/m³")
+        print(f"  Temperature: {data.get('temperature', 'N/A')}°C")
+        print(f"  Humidity: {data.get('humidity', 'N/A')}%")
+        print(f"  Source: {data.get('source', 'N/A')}")
+        print(f"  Timestamp: {data.get('timestamp', 'N/A')}")
+    else:
+        print(f"\nKARACHI: No data available")
     print("=" * 60)
 
 def show_statistics(days=30):
@@ -153,20 +211,19 @@ def show_statistics(days=30):
     print("=" * 60)
 
     collector = get_data_collector()
-    for city in CITIES.keys():
-        stats = collector.get_city_statistics(city, days)
-        if stats:
-            print(f"\n{city.upper()}:")
-            print(f"  Total records: {stats.get('total_records', 0)}")
-            print(f"  Average AQI: {stats.get('avg_aqi', 'N/A')}")
-            print(f"  Min AQI: {stats.get('min_aqi', 'N/A')}")
-            print(f"  Max AQI: {stats.get('max_aqi', 'N/A')}")
-            print(f"  Average temperature: {stats.get('avg_temperature', 'N/A')}°C")
-            print(f"  Average humidity: {stats.get('avg_humidity', 'N/A')}%")
-            print(f"  Average PM2.5: {stats.get('avg_pm25', 'N/A')} μg/m³")
-            print(f"  Average PM10: {stats.get('avg_pm10', 'N/A')} μg/m³")
-        else:
-            print(f"\n{city.upper()}: No statistics available")
+    stats = collector.get_city_statistics("karachi", days)
+    if stats:
+        print(f"\nKARACHI:")
+        print(f"  Total records: {stats.get('total_records', 0)}")
+        print(f"  Average AQI: {stats.get('avg_aqi', 'N/A')}")
+        print(f"  Min AQI: {stats.get('min_aqi', 'N/A')}")
+        print(f"  Max AQI: {stats.get('max_aqi', 'N/A')}")
+        print(f"  Average temperature: {stats.get('avg_temperature', 'N/A')}°C")
+        print(f"  Average humidity: {stats.get('avg_humidity', 'N/A')}%")
+        print(f"  Average PM2.5: {stats.get('avg_pm25', 'N/A')} μg/m³")
+        print(f"  Average PM10: {stats.get('avg_pm10', 'N/A')} μg/m³")
+    else:
+        print(f"\nKARACHI: No statistics available")
     print("=" * 60)
 
 def cleanup_old_data(days=90):
@@ -180,7 +237,7 @@ def cleanup_old_data(days=90):
     print("=" * 60)
 
 def main():
-    print("AQI Data Collection System for Pakistani Cities")
+    print("AQI Data Collection System for Karachi")
     print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     aqicn_key, openweather_key, airvisual_key = setup_environment()

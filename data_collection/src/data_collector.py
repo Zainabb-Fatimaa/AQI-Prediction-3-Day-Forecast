@@ -120,6 +120,10 @@ class DataCollector:
             for city in cities.keys()
         }
 
+    def get_latest_data_for_city(self, city: str) -> Optional[Dict[str, Any]]:
+        """Get the latest AQI data for Karachi only."""
+        return self.db_manager.get_latest_aqi_data(city)
+
     def get_city_statistics(self, city: str, days: int = 30) -> Dict[str, Any]:
         """Get statistics for a specific city."""
         return self.db_manager.get_city_statistics(city, days)

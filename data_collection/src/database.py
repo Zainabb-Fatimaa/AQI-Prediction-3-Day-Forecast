@@ -100,6 +100,51 @@ class DatabaseManager:
         except Exception as e:
             self.logger.error(f"❌ Failed to export AQI data to CSV: {e}")
 
+    def get_latest_aqi_data(self, city: str) -> dict:
+        """Return the latest AQI data for Karachi only."""
+        query = "SELECT * FROM aqi_data WHERE city=? ORDER BY timestamp DESC LIMIT 1"
+        self.cursor.execute(query, (city,))
+        row = self.cursor.fetchone()
+        if row:
+            columns = [desc[0] for desc in self.cursor.description]
+            return dict(zip(columns, row))
+        return None
+
+    def get_city_statistics(self, city: str, days: int = 30) -> dict:
+        """Return statistics for Karachi only."""
+        query = "SELECT * FROM aqi_data WHERE city=? AND timestamp >= date('now', ? )"
+        self.cursor.execute(query, (city, f'-{days} days'))
+        rows = self.cursor.fetchall()
+        if not rows:
+            return None
+        columns = [desc[0] for desc in self.cursor.description]
+        df = pd.DataFrame(rows, columns=columns)
+        stats = {
+            'total_records': len(df),
+            'avg_aqi': df['aqi'].mean(),
+            'min_aqi': df['aqi'].min(),
+            'max_aqi': df['aqi'].max(),
+            'avg_temperature': df['temperature'].mean(),
+            'avg_humidity': df['humidity'].mean(),
+            'avg_pm25': df['pm25'].mean(),
+            'avg_pm10': df['pm10'].mean()
+        }
+        return stats
+
+    def get_database_stats(self):
+        query = "SELECT COUNT(*) FROM aqi_data"
+        self.cursor.execute(query)
+        total_aqi_records = self.cursor.fetchone()[0]
+        db_size_mb = os.path.getsize(self.db_path) / (1024 * 1024)
+        return {'total_aqi_records': total_aqi_records, 'database_size_mb': db_size_mb}
+
+    def cleanup_old_data(self, days: int = 90) -> int:
+        query = "DELETE FROM aqi_data WHERE timestamp < date('now', ? )"
+        self.cursor.execute(query, (f'-{days} days',))
+        deleted = self.cursor.rowcount
+        self.conn.commit()
+        return deleted
+
     def close(self):
         self.conn.close()
 

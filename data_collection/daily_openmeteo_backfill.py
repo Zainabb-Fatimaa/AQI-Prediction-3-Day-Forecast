@@ -22,6 +22,10 @@ fg = fs.get_or_create_feature_group(
     online_enabled=True
 )
 
+CSV_PATH_LOCAL = "karachi_merged_data_aqi.csv"
+CSV_PATH_HOPS = "resources/karachi_merged_data_aqi.csv/karachi_merged_data_aqi.csv"
+
+
 def fetch_open_meteo_data(lat, lon, start, end):
     cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
     retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
@@ -61,13 +65,42 @@ def fetch_open_meteo_data(lat, lon, start, end):
     df = pd.DataFrame(hourly_data)
     df["city"] = "Karachi"
     df = df.apply(lambda row: standardize_row(row, source="open-meteo"), axis=1)
+    # Standardize column names for feature group
+    df.rename(columns={'pm2.5': 'pm2_5', 'PM2.5': 'pm2_5', 'PM10': 'pm10'}, inplace=True)
+    df.columns = [col.lower() for col in df.columns]
+    # Convert numeric columns to float64
+    numeric_cols = [
+        'temperature', 'humidity', 'wind_speed', 'wind_direction',
+        'hour', 'day', 'weekday', 'pm2_5', 'pm10',
+        'co', 'so2', 'o3', 'no2', 'aqi'
+    ]
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = df[col].astype('float64')
+    # Ensure timestamp is datetime
+    if 'timestamp' in df.columns:
+        df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
     return df
+
+
+def append_to_csv(df, csv_path):
+    try:
+        if os.path.exists(csv_path):
+            existing = pd.read_csv(csv_path)
+            combined = pd.concat([existing, df], ignore_index=True)
+            combined.drop_duplicates(subset=["timestamp"], keep="last", inplace=True)
+            combined.to_csv(csv_path, index=False)
+        else:
+            df.to_csv(csv_path, index=False)
+    except Exception as e:
+        print(f"Error appending to CSV {csv_path}: {e}")
+
 
 def compare_and_overwrite(openmeteo_df, fg, threshold=2):
     fg_df = fg.read()
     fg_df = fg_df[fg_df["city"].str.lower() == "karachi"]
-    fg_df["timestamp"] = pd.to_datetime(fg_df["timestamp"])
-    openmeteo_df["timestamp"] = pd.to_datetime(openmeteo_df["timestamp"])
+    fg_df["timestamp"] = pd.to_datetime(fg_df["timestamp"], errors='coerce')
+    openmeteo_df["timestamp"] = pd.to_datetime(openmeteo_df["timestamp"], errors='coerce')
 
     merged = pd.merge(
         openmeteo_df,
@@ -77,7 +110,7 @@ def compare_and_overwrite(openmeteo_df, fg, threshold=2):
         suffixes=("_openmeteo", "_api")
     )
 
-    fields = ["pm25_ugm3", "pm10_ugm3", "co_ppb", "no2_ppb", "so2_ppb", "o3_ppb"]
+    fields = ["pm2_5", "pm10", "co", "no2", "so2", "o3"]
     result_rows = []
     for _, row in merged.iterrows():
         new_row = row.filter(like="_openmeteo").to_dict()
@@ -98,6 +131,22 @@ def compare_and_overwrite(openmeteo_df, fg, threshold=2):
         result_rows.append(new_row)
     result_df = pd.DataFrame(result_rows)
     fg.insert(result_df, write_options={"wait_for_job": True})
+    # Append/overwrite only the affected day's rows in both CSVs
+    for csv_path in [CSV_PATH_LOCAL, CSV_PATH_HOPS]:
+        try:
+            if os.path.exists(csv_path):
+                csv_df = pd.read_csv(csv_path)
+                result_dates = pd.to_datetime(result_df["timestamp"], errors='coerce').dt.date.unique()
+                csv_df["timestamp"] = pd.to_datetime(csv_df["timestamp"], errors='coerce')
+                csv_df = csv_df[~csv_df["timestamp"].dt.date.isin(result_dates)]
+                combined = pd.concat([csv_df, result_df], ignore_index=True)
+                combined.drop_duplicates(subset=["timestamp"], keep="last", inplace=True)
+                combined.to_csv(csv_path, index=False)
+            else:
+                result_df.to_csv(csv_path, index=False)
+        except Exception as e:
+            print(f"Error updating CSV {csv_path}: {e}")
+
 
 def daily_backfill():
     city = "Karachi"
