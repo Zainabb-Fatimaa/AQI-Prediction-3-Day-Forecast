@@ -237,7 +237,13 @@ dataset_api.upload("karachi_merged_data_aqi.csv", "Resources", overwrite=True)
 
 # --- Convert numeric columns to float64 ---
 numeric_cols = final_df.select_dtypes(include='number').columns.tolist()
-final_df[numeric_cols] = final_df[numeric_cols].astype('float64')
+for col in final_df.columns:
+    if col not in ['date', 'date_str']:
+        try:
+            final_df[col] = final_df[col].astype(float)
+        except ValueError:
+            final_df[col] = pd.to_numeric(final_df[col], errors='coerce')
+
 
 # --- Convert 'date' column to Python date objects ---
 final_df['date'] = [x.date() if hasattr(x, 'date') else pd.to_datetime(x).date() for x in final_df['date']]
