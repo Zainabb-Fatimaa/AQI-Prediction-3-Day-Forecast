@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Script: data_collect_aqi.py
-Description: Production-ready script to collect AQI and weather data, process, and upload to Hopsworks feature store. Designed for local or server execution (not Colab).
+Script: data_collect_aqi.py - FIXED VERSION
+Description: Production-ready script to collect AQI and weather data, process, and upload to Hopsworks feature store.
 """
 import os
 import pandas as pd
@@ -163,7 +163,7 @@ air_quality_df['Calculated AQI NO2'] = calculate_epa_aqi('NO2', air_quality_df['
 pollutant_aqi_columns = ['Calculated AQI PM2.5', 'Calculated AQI PM10', 'Calculated AQI CO',
                          'Calculated AQI SO2', 'Calculated AQI O3', 'Calculated AQI NO2']
 air_quality_df[pollutant_aqi_columns] = air_quality_df[pollutant_aqi_columns].astype(float)
-air_quality_df['Calculated Overall AQI'] = air_quality_df[pollutant_aqi_columns].max(axis=1)  # type: ignore
+air_quality_df['Calculated Overall AQI'] = air_quality_df[pollutant_aqi_columns].max(axis=1)
 
 # --- Weather Archive API ---
 weather_url = "https://archive-api.open-meteo.com/v1/archive"
@@ -202,6 +202,7 @@ hourly_df['relative_humidity_2m_24h'] = hourly_df['relative_humidity_2m'].rollin
 
 # --- Merge DataFrames ---
 merged_df = pd.merge(hourly_df, air_quality_df, on='date', how='inner')
+
 # STEP 1: Rename and filter required columns only (IMPORTANT)
 merged_df = merged_df.rename(columns={
     'temperature_2m': 'temperature',
@@ -217,35 +218,49 @@ merged_df = merged_df.rename(columns={
     'Calculated Overall AQI': 'aqi'
 }, errors='ignore')
 
-merged_df = merged_df[[
+# Filter to only required columns
+required_columns = [
     'date', 'temperature', 'humidity', 'wind_speed', 'wind_direction',
     'pm2_5', 'pm10', 'co', 'so2', 'o3', 'no2', 'aqi'
-]]
+]
+
+# Check which columns are available
+available_columns = [col for col in required_columns if col in merged_df.columns]
+print(f"Available columns from required: {available_columns}")
+print(f"Missing columns: {set(required_columns) - set(available_columns)}")
+
+merged_df = merged_df[available_columns]
 
 # --- Add date_str for online primary key ---
 if pd.api.types.is_datetime64_any_dtype(merged_df['date']):
-    merged_df['date_str'] = [x.strftime("%Y-%m-%d %H:%M:%S") if hasattr(x, 'strftime') else str(x) for x in merged_df['date']]
+    merged_df['date_str'] = merged_df['date'].dt.strftime("%Y-%m-%d %H:%M:%S")
 else:
-    merged_df['date_str'] = [pd.to_datetime(x).strftime("%Y-%m-%d %H:%M:%S") for x in merged_df['date']]
+    merged_df['date_str'] = pd.to_datetime(merged_df['date']).dt.strftime("%Y-%m-%d %H:%M:%S")
 
-# --- Fetch existing feature group data and merge ---
+# --- Handle existing data merge (FIXED VERSION) ---
 try:
     if not existing_df.empty:
         print(f"Existing data shape: {existing_df.shape}")
         print(f"New data shape: {merged_df.shape}")
         
         # Ensure both dataframes have the same columns
-        existing_df['date_str'] = existing_df['date_str'].astype(str)
-        merged_df['date_str'] = merged_df['date_str'].astype(str)
-        
-        # Reset index to avoid reindexing issues
         existing_df = existing_df.reset_index(drop=True)
         merged_df = merged_df.reset_index(drop=True)
         
-        # Concatenate and remove duplicates
-        final_df = pd.concat([merged_df, existing_df], ignore_index=True)
-        print(f"Combined data shape before deduplication: {final_df.shape}")
+        # Get common columns only
+        common_columns = list(set(existing_df.columns) & set(merged_df.columns))
+        print(f"Common columns: {common_columns}")
         
+        # Use only common columns for concatenation
+        existing_subset = existing_df[common_columns].copy()
+        merged_subset = merged_df[common_columns].copy()
+        
+        # Ensure date_str is string type
+        existing_subset['date_str'] = existing_subset['date_str'].astype(str)
+        merged_subset['date_str'] = merged_subset['date_str'].astype(str)
+        
+        # Concatenate and remove duplicates
+        final_df = pd.concat([merged_subset, existing_subset], ignore_index=True)
         final_df = final_df.drop_duplicates(subset=['date_str'], keep='first')
         print(f"Final data shape after deduplication: {final_df.shape}")
     else:
@@ -256,46 +271,61 @@ except Exception as e:
     print("Using new data only")
     final_df = merged_df.copy()
 
+# --- FIXED: Remove duplicate columns ---
+print(f"Columns before deduplication: {list(final_df.columns)}")
+final_df = final_df.loc[:, ~final_df.columns.duplicated()]  # Remove duplicate columns
+print(f"Columns after deduplication: {list(final_df.columns)}")
+
 # --- Save to CSV and upload to Hopsworks Resources ---
 final_df.to_csv("karachi_merged_data_aqi.csv", index=False)
 dataset_api.upload("karachi_merged_data_aqi.csv", "Resources", overwrite=True)
 
-# --- Data type fixes for Hopsworks compatibility ---
+# --- FIXED: Data type processing ---
 print("Processing data types for Hopsworks compatibility...")
 print(f"Available columns: {list(final_df.columns)}")
 
-# Convert numeric columns to float64 and handle NaN values
-numeric_cols = ['temperature', 'humidity', 'wind_speed', 'wind_direction', 
-                'pm2_5', 'pm10', 'co', 'so2', 'o3', 'no2', 'aqi']
+# Define numeric columns that should exist
+expected_numeric_cols = ['temperature', 'humidity', 'wind_speed', 'wind_direction', 
+                        'pm2_5', 'pm10', 'co', 'so2', 'o3', 'no2', 'aqi']
+
+# Only process columns that actually exist
+numeric_cols = [col for col in expected_numeric_cols if col in final_df.columns]
+print(f"Processing numeric columns: {numeric_cols}")
 
 for col in numeric_cols:
-    if col in final_df.columns:
-        print(f"Processing column: {col}")
-        try:
-            # Check if column exists and is a valid series
-            if isinstance(final_df[col], pd.Series):
-                # Convert to numeric, coercing errors to NaN
-                final_df[col] = pd.to_numeric(final_df[col], errors='coerce')
-                # Replace any remaining NaN values with 0 or appropriate default
-                final_df[col] = final_df[col].fillna(0.0)
-                # Ensure float64 dtype
-                final_df[col] = final_df[col].astype('float64')
-                print(f"  ✓ Successfully processed {col}")
-            else:
-                print(f"  ⚠ Column {col} is not a pandas Series, skipping")
-        except Exception as e:
-            print(f"  ✗ Error processing column {col}: {e}")
-    else:
-        print(f"  ⚠ Column {col} not found in DataFrame")
+    print(f"Processing column: {col}")
+    try:
+        # Check if column exists and is a valid series
+        if col in final_df.columns and isinstance(final_df[col], pd.Series):
+            # Convert to numeric, coercing errors to NaN
+            final_df[col] = pd.to_numeric(final_df[col], errors='coerce')
+            # Replace any remaining NaN values with 0 or appropriate default
+            final_df[col] = final_df[col].fillna(0.0)
+            # Replace infinite values
+            final_df[col] = final_df[col].replace([np.inf, -np.inf], 0.0)
+            # Ensure float64 dtype
+            final_df[col] = final_df[col].astype('float64')
+            print(f"  ✓ Successfully processed {col}")
+        else:
+            print(f"  ⚠ Column {col} not found or invalid")
+    except Exception as e:
+        print(f"  ✗ Error processing column {col}: {e}")
 
-# Convert 'date' column to Python date objects
-final_df['date'] = pd.to_datetime(final_df['date']).dt.date
+# Convert 'date' column properly
+if 'date' in final_df.columns:
+    try:
+        final_df['date'] = pd.to_datetime(final_df['date']).dt.date
+        print("  ✓ Successfully processed date column")
+    except Exception as e:
+        print(f"  ✗ Error processing date column: {e}")
 
 # Ensure date_str is string
-final_df['date_str'] = final_df['date_str'].astype(str)
+if 'date_str' in final_df.columns:
+    final_df['date_str'] = final_df['date_str'].astype(str)
+    print("  ✓ Successfully processed date_str column")
 
-# --- Validate DataFrame structure ---
-print("Final DataFrame info:")
+# --- Final validation ---
+print("\nFinal DataFrame info:")
 print(f"Shape: {final_df.shape}")
 print(f"Columns: {list(final_df.columns)}")
 print(f"Data types:\n{final_df.dtypes}")
@@ -303,18 +333,23 @@ print(f"Data types:\n{final_df.dtypes}")
 # Check for any remaining issues
 print("\nData validation:")
 print(f"Null values per column:\n{final_df.isnull().sum()}")
-print(f"Infinite values: {np.isinf(final_df.select_dtypes(include=[np.number])).sum().sum()}")
+numeric_cols_in_df = final_df.select_dtypes(include=[np.number]).columns
+if len(numeric_cols_in_df) > 0:
+    print(f"Infinite values: {np.isinf(final_df[numeric_cols_in_df]).sum().sum()}")
+else:
+    print("No numeric columns found for infinite value check")
 
-# --- Define schema with explicit types ---
+# --- FIXED: Define schema correctly ---
 feature_group_schema = []
 for col in final_df.columns:
     if col == 'date':
         feature_group_schema.append(Feature(name=col, type="date"))
     elif col == 'date_str':
         feature_group_schema.append(Feature(name=col, type="string"))
-    elif col in numeric_cols:
+    elif col in numeric_cols and col in final_df.columns:
         feature_group_schema.append(Feature(name=col, type="double"))
     else:
+        # Default to string for any other columns
         feature_group_schema.append(Feature(name=col, type="string"))
 
 print(f"\nFeature group schema: {[f.name + ':' + f.type for f in feature_group_schema]}")
@@ -325,46 +360,74 @@ try:
     print("Using existing feature group")
 except FeatureStoreException:
     print("Creating new feature group")
-    # Create new feature group if it doesn't exist
     fg = fs.create_feature_group(
         name=feature_group_name,
         version=feature_group_version,
-        description="Final features for Karachi AQI model (online + offline) - Overwritten",
+        description="Final features for Karachi AQI model (online + offline) - Fixed version",
         primary_key=["date_str"],
-        event_time="date", # Use 'date' column as event time
+        event_time="date",
         features=feature_group_schema,
         online_enabled=True
     )
 except Exception as e:
     print(f"An unexpected error occurred: {e}")
-    fg = None # Set fg to None if an unexpected error occurs
+    fg = None
 
-# --- Insert merged data into feature group ---
+# --- FIXED: Insert data with better error handling ---
 if fg is not None:
     try:
         print("Inserting data into feature group...")
-        # Create a clean copy for insertion
+        
+        # Create a completely clean copy for insertion
         insert_df = final_df.copy()
         
-        # Ensure all data types are compatible
+        # Final cleanup before insertion
+        print("Performing final data cleanup...")
+        
+        # Ensure all numeric columns are properly formatted
         for col in insert_df.columns:
             if col in numeric_cols:
-                # Ensure no NaN or inf values
-                insert_df[col] = insert_df[col].replace([np.inf, -np.inf], 0.0)
-                insert_df[col] = insert_df[col].fillna(0.0)
+                # Convert to numpy array first, then back to pandas series
+                values = insert_df[col].values
+                values = np.where(np.isnan(values), 0.0, values)
+                values = np.where(np.isinf(values), 0.0, values)
+                insert_df[col] = pd.Series(values, dtype='float64')
         
-        # Insert data with overwrite=True
-        fg.insert(insert_df, write_options={"wait_for_job": True, "overwrite": True})
-        print("Data inserted and overwritten successfully.")
+        # Ensure no object dtypes for numeric columns
+        print("Final data types before insertion:")
+        print(insert_df.dtypes)
+        
+        # Try to insert with better error handling
+        print(f"About to insert {len(insert_df)} records...")
+        
+        # Check the first few rows for any issues
+        print("Sample data being inserted:")
+        print(insert_df.head(3))
+        
+        fg.insert(insert_df, write_options={"wait_for_job": True})
+        print("✓ Data inserted successfully!")
         print(f"Feature group: {fg.name} (version {fg.version})")
         print(f"Records inserted: {len(insert_df)}")
         
     except Exception as e:
-        print(f"Error inserting data into feature group: {e}")
+        print(f"✗ Error inserting data into feature group: {e}")
         print(f"Error type: {type(e).__name__}")
-        # Additional debugging info
-        print("\nDataFrame sample for debugging:")
+        
+        # Enhanced debugging info
+        print("\n=== DEBUGGING INFO ===")
+        print("DataFrame info:")
+        print(insert_df.info())
+        print("\nDataFrame describe:")
+        print(insert_df.describe())
+        print("\nFirst few rows:")
         print(insert_df.head())
-        print(f"\nDataFrame dtypes:\n{insert_df.dtypes}")
+        print("\nData types:")
+        print(insert_df.dtypes)
+        print("\nColumn names and types:")
+        for col in insert_df.columns:
+            print(f"  {col}: {insert_df[col].dtype} (sample: {insert_df[col].iloc[0] if len(insert_df) > 0 else 'N/A'})")
+        
 else:
     print("Feature group operation failed. Please check your Hopsworks connection and parameters.")
+
+print("\n=== SCRIPT COMPLETED ===")
