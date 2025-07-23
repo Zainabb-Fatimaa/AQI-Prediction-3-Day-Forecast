@@ -194,16 +194,19 @@ hourly_data["wind_direction_100m"] = hourly.Variables(6).ValuesAsNumpy()
 hourly_df = pd.DataFrame(data=hourly_data)
 hourly_df['wind_speed_10m'] = hourly_df['wind_speed_10m'] * 3.6
 hourly_df['wind_speed_100m'] = hourly_df['wind_speed_100m'] * 3.6
+
+# CRITICAL FIX: Create time-based features BEFORE merging
 hourly_df['hour'] = hourly_df['date'].dt.hour
 hourly_df['day'] = hourly_df['date'].dt.day
 hourly_df['weekday'] = hourly_df['date'].dt.weekday
+
 hourly_df['temperature_change_1h'] = hourly_df['temperature_2m'].diff()
 hourly_df['relative_humidity_2m_24h'] = hourly_df['relative_humidity_2m'].rolling(window=24, min_periods=1).mean()
 
 # --- Merge DataFrames ---
 merged_df = pd.merge(hourly_df, air_quality_df, on='date', how='inner')
 
-# STEP 1: Rename and filter required columns only (IMPORTANT)
+# FIXED: Update column renaming and required columns to include time features
 merged_df = merged_df.rename(columns={
     'temperature_2m': 'temperature',
     'relative_humidity_2m': 'humidity',
@@ -218,10 +221,11 @@ merged_df = merged_df.rename(columns={
     'Calculated Overall AQI': 'aqi'
 }, errors='ignore')
 
-# Filter to only required columns
+# CRITICAL FIX: Include the time-based features in required columns
 required_columns = [
     'date', 'temperature', 'humidity', 'wind_speed', 'wind_direction',
-    'pm2_5', 'pm10', 'co', 'so2', 'o3', 'no2', 'aqi'
+    'pm2_5', 'pm10', 'co', 'so2', 'o3', 'no2', 'aqi', 
+    'hour', 'day', 'weekday'  # Add the missing time features
 ]
 
 # Check which columns are available
@@ -284,9 +288,10 @@ dataset_api.upload("karachi_merged_data_aqi.csv", "Resources", overwrite=True)
 print("Processing data types for Hopsworks compatibility...")
 print(f"Available columns: {list(final_df.columns)}")
 
-# Define numeric columns that should exist
+# FIXED: Updated numeric columns to include time features
 expected_numeric_cols = ['temperature', 'humidity', 'wind_speed', 'wind_direction', 
-                        'pm2_5', 'pm10', 'co', 'so2', 'o3', 'no2', 'aqi']
+                        'pm2_5', 'pm10', 'co', 'so2', 'o3', 'no2', 'aqi',
+                        'hour', 'day', 'weekday']  # Include the time features
 
 # Only process columns that actually exist
 numeric_cols = [col for col in expected_numeric_cols if col in final_df.columns]
