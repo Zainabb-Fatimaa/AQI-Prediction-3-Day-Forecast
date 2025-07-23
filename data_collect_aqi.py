@@ -271,24 +271,28 @@ try:
     print("Using existing feature group")
 except FeatureStoreException:
     print("Creating new feature group")
+    # Create new feature group if it doesn't exist
     fg = fs.create_feature_group(
         name=feature_group_name,
         version=feature_group_version,
         description="Final features for Karachi AQI model (online + offline) - Overwritten",
         primary_key=["date_str"],
-        event_time="date",
+        event_time="date", # Use 'date' column as event time
         features=feature_group_schema,
         online_enabled=True
     )
 except Exception as e:
-    print(f"Unexpected error: {e}")
-    fg = None
+    print(f"An unexpected error occurred: {e}")
+    fg = None # Set fg to None if an unexpected error occurs
 
 # --- Insert merged data into feature group ---
 if fg is not None:
     try:
+        # Insert data with overwrite=True
         fg.insert(final_df, write_options={"wait_for_job": True, "overwrite": True})
         print("Data inserted and overwritten successfully.")
+        print(fg)
+        print(fg._feature_group_engine.__class__.__name__)
     except Exception as e:
         print(f"Error inserting data into feature group: {e}")
 else:
