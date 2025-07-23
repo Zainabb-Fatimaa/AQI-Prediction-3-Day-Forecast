@@ -202,6 +202,7 @@ hourly_df['relative_humidity_2m_24h'] = hourly_df['relative_humidity_2m'].rollin
 
 # --- Merge DataFrames ---
 merged_df = pd.merge(hourly_df, air_quality_df, on='date', how='inner')
+# STEP 1: Rename and filter required columns only (IMPORTANT)
 merged_df = merged_df.rename(columns={
     'temperature_2m': 'temperature',
     'relative_humidity_2m': 'humidity',
@@ -216,6 +217,10 @@ merged_df = merged_df.rename(columns={
     'Calculated Overall AQI': 'aqi'
 }, errors='ignore')
 
+merged_df = merged_df[[
+    'date', 'temperature', 'humidity', 'wind_speed', 'wind_direction',
+    'pm2_5', 'pm10', 'co', 'so2', 'o3', 'no2', 'aqi'
+]]
 # --- Add date_str for online primary key ---
 if pd.api.types.is_datetime64_any_dtype(merged_df['date']):
     merged_df['date_str'] = [x.strftime("%Y-%m-%d %H:%M:%S") if hasattr(x, 'strftime') else str(x) for x in merged_df['date']]
@@ -263,8 +268,9 @@ for col in final_df.columns:
 # --- Create or update feature group ---
 try:
     fg = fs.get_feature_group(name=feature_group_name, version=feature_group_version)
-    fg.update(features=feature_group_schema)
+    print("Using existing feature group")
 except FeatureStoreException:
+    print("Creating new feature group")
     fg = fs.create_feature_group(
         name=feature_group_name,
         version=feature_group_version,
@@ -274,6 +280,9 @@ except FeatureStoreException:
         features=feature_group_schema,
         online_enabled=True
     )
+except Exception as e:
+    print(f"Unexpected error: {e}")
+    fg = None
 
 # --- Insert merged data into feature group ---
 if fg is not None:
