@@ -231,14 +231,29 @@ else:
 # --- Fetch existing feature group data and merge ---
 try:
     if not existing_df.empty:
+        print(f"Existing data shape: {existing_df.shape}")
+        print(f"New data shape: {merged_df.shape}")
+        
+        # Ensure both dataframes have the same columns
         existing_df['date_str'] = existing_df['date_str'].astype(str)
         merged_df['date_str'] = merged_df['date_str'].astype(str)
+        
+        # Reset index to avoid reindexing issues
+        existing_df = existing_df.reset_index(drop=True)
+        merged_df = merged_df.reset_index(drop=True)
+        
+        # Concatenate and remove duplicates
         final_df = pd.concat([merged_df, existing_df], ignore_index=True)
+        print(f"Combined data shape before deduplication: {final_df.shape}")
+        
         final_df = final_df.drop_duplicates(subset=['date_str'], keep='first')
+        print(f"Final data shape after deduplication: {final_df.shape}")
     else:
+        print("No existing data found, using new data only")
         final_df = merged_df.copy()
 except Exception as e:
     print(f"Warning: Error merging with existing data: {e}")
+    print("Using new data only")
     final_df = merged_df.copy()
 
 # --- Save to CSV and upload to Hopsworks Resources ---
@@ -247,6 +262,7 @@ dataset_api.upload("karachi_merged_data_aqi.csv", "Resources", overwrite=True)
 
 # --- Data type fixes for Hopsworks compatibility ---
 print("Processing data types for Hopsworks compatibility...")
+print(f"Available columns: {list(final_df.columns)}")
 
 # Convert numeric columns to float64 and handle NaN values
 numeric_cols = ['temperature', 'humidity', 'wind_speed', 'wind_direction', 
@@ -254,12 +270,23 @@ numeric_cols = ['temperature', 'humidity', 'wind_speed', 'wind_direction',
 
 for col in numeric_cols:
     if col in final_df.columns:
-        # Convert to numeric, coercing errors to NaN
-        final_df[col] = pd.to_numeric(final_df[col], errors='coerce')
-        # Replace any remaining NaN values with 0 or appropriate default
-        final_df[col] = final_df[col].fillna(0.0)
-        # Ensure float64 dtype
-        final_df[col] = final_df[col].astype('float64')
+        print(f"Processing column: {col}")
+        try:
+            # Check if column exists and is a valid series
+            if isinstance(final_df[col], pd.Series):
+                # Convert to numeric, coercing errors to NaN
+                final_df[col] = pd.to_numeric(final_df[col], errors='coerce')
+                # Replace any remaining NaN values with 0 or appropriate default
+                final_df[col] = final_df[col].fillna(0.0)
+                # Ensure float64 dtype
+                final_df[col] = final_df[col].astype('float64')
+                print(f"  ✓ Successfully processed {col}")
+            else:
+                print(f"  ⚠ Column {col} is not a pandas Series, skipping")
+        except Exception as e:
+            print(f"  ✗ Error processing column {col}: {e}")
+    else:
+        print(f"  ⚠ Column {col} not found in DataFrame")
 
 # Convert 'date' column to Python date objects
 final_df['date'] = pd.to_datetime(final_df['date']).dt.date
