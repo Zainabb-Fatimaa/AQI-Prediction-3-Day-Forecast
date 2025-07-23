@@ -221,6 +221,7 @@ merged_df = merged_df[[
     'date', 'temperature', 'humidity', 'wind_speed', 'wind_direction',
     'pm2_5', 'pm10', 'co', 'so2', 'o3', 'no2', 'aqi'
 ]]
+
 # --- Add date_str for online primary key ---
 if pd.api.types.is_datetime64_any_dtype(merged_df['date']):
     merged_df['date_str'] = [x.strftime("%Y-%m-%d %H:%M:%S") if hasattr(x, 'strftime') else str(x) for x in merged_df['date']]
@@ -229,41 +230,67 @@ else:
 
 # --- Fetch existing feature group data and merge ---
 try:
-    existing_df['date_str'] = existing_df['date_str'].astype(str)
-    merged_df['date_str'] = merged_df['date_str'].astype(str)
-    final_df = pd.concat([merged_df, existing_df], ignore_index=True)
-    final_df = final_df.drop_duplicates(subset=['date_str'], keep='first')
-except Exception:
+    if not existing_df.empty:
+        existing_df['date_str'] = existing_df['date_str'].astype(str)
+        merged_df['date_str'] = merged_df['date_str'].astype(str)
+        final_df = pd.concat([merged_df, existing_df], ignore_index=True)
+        final_df = final_df.drop_duplicates(subset=['date_str'], keep='first')
+    else:
+        final_df = merged_df.copy()
+except Exception as e:
+    print(f"Warning: Error merging with existing data: {e}")
     final_df = merged_df.copy()
 
 # --- Save to CSV and upload to Hopsworks Resources ---
 final_df.to_csv("karachi_merged_data_aqi.csv", index=False)
 dataset_api.upload("karachi_merged_data_aqi.csv", "Resources", overwrite=True)
 
-# --- Convert numeric columns to float64 ---
-numeric_cols = final_df.select_dtypes(include='number').columns.tolist()
-for col in final_df.columns:
-    if col not in ['date', 'date_str']:
-        try:
-            final_df[col] = final_df[col].astype(float)
-        except ValueError:
-            final_df[col] = pd.to_numeric(final_df[col], errors='coerce')
+# --- Data type fixes for Hopsworks compatibility ---
+print("Processing data types for Hopsworks compatibility...")
 
+# Convert numeric columns to float64 and handle NaN values
+numeric_cols = ['temperature', 'humidity', 'wind_speed', 'wind_direction', 
+                'pm2_5', 'pm10', 'co', 'so2', 'o3', 'no2', 'aqi']
 
-# --- Convert 'date' column to Python date objects ---
-final_df['date'] = [x.date() if hasattr(x, 'date') else pd.to_datetime(x).date() for x in final_df['date']]
+for col in numeric_cols:
+    if col in final_df.columns:
+        # Convert to numeric, coercing errors to NaN
+        final_df[col] = pd.to_numeric(final_df[col], errors='coerce')
+        # Replace any remaining NaN values with 0 or appropriate default
+        final_df[col] = final_df[col].fillna(0.0)
+        # Ensure float64 dtype
+        final_df[col] = final_df[col].astype('float64')
 
-# --- Define schema ---
+# Convert 'date' column to Python date objects
+final_df['date'] = pd.to_datetime(final_df['date']).dt.date
+
+# Ensure date_str is string
+final_df['date_str'] = final_df['date_str'].astype(str)
+
+# --- Validate DataFrame structure ---
+print("Final DataFrame info:")
+print(f"Shape: {final_df.shape}")
+print(f"Columns: {list(final_df.columns)}")
+print(f"Data types:\n{final_df.dtypes}")
+
+# Check for any remaining issues
+print("\nData validation:")
+print(f"Null values per column:\n{final_df.isnull().sum()}")
+print(f"Infinite values: {np.isinf(final_df.select_dtypes(include=[np.number])).sum().sum()}")
+
+# --- Define schema with explicit types ---
 feature_group_schema = []
 for col in final_df.columns:
     if col == 'date':
         feature_group_schema.append(Feature(name=col, type="date"))
     elif col == 'date_str':
         feature_group_schema.append(Feature(name=col, type="string"))
-    elif pd.api.types.is_numeric_dtype(final_df[col]):
+    elif col in numeric_cols:
         feature_group_schema.append(Feature(name=col, type="double"))
     else:
         feature_group_schema.append(Feature(name=col, type="string"))
+
+print(f"\nFeature group schema: {[f.name + ':' + f.type for f in feature_group_schema]}")
 
 # --- Create or update feature group ---
 try:
@@ -288,12 +315,29 @@ except Exception as e:
 # --- Insert merged data into feature group ---
 if fg is not None:
     try:
+        print("Inserting data into feature group...")
+        # Create a clean copy for insertion
+        insert_df = final_df.copy()
+        
+        # Ensure all data types are compatible
+        for col in insert_df.columns:
+            if col in numeric_cols:
+                # Ensure no NaN or inf values
+                insert_df[col] = insert_df[col].replace([np.inf, -np.inf], 0.0)
+                insert_df[col] = insert_df[col].fillna(0.0)
+        
         # Insert data with overwrite=True
-        fg.insert(final_df, write_options={"wait_for_job": True, "overwrite": True})
+        fg.insert(insert_df, write_options={"wait_for_job": True, "overwrite": True})
         print("Data inserted and overwritten successfully.")
-        print(fg)
-        print(fg._feature_group_engine.__class__.__name__)
+        print(f"Feature group: {fg.name} (version {fg.version})")
+        print(f"Records inserted: {len(insert_df)}")
+        
     except Exception as e:
         print(f"Error inserting data into feature group: {e}")
+        print(f"Error type: {type(e).__name__}")
+        # Additional debugging info
+        print("\nDataFrame sample for debugging:")
+        print(insert_df.head())
+        print(f"\nDataFrame dtypes:\n{insert_df.dtypes}")
 else:
     print("Feature group operation failed. Please check your Hopsworks connection and parameters.")
