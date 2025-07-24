@@ -1,4 +1,4 @@
-name: Data Collect AQI
+name: Feature Preprocessing
 
 on:
   schedule:
