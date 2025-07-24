@@ -1098,7 +1098,7 @@ fg = fs.get_feature_group(name="karachi_raw_data_store", version=1)
 existing_df = fg.read()
 
 # Assuming you have a Preprocessor class with the methods shown in your first code block
-preprocessor = Preprocessor(target_column="aqi")  # Initialize with your target column
+preprocessor = AQIDataPreprocessor(target_column="aqi")  # Initialize with your target column
 preprocessor.run_full_preprocessing(dataframe=existing_df)
 
 # Get processed data
