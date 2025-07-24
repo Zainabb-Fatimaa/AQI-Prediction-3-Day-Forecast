@@ -13,3 +13,4 @@ confluent-kafka
 openmeteo-requests
 requests-cache
 retry-requests
+matplotlib
