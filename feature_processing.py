@@ -1118,10 +1118,10 @@ if processed_data is not None:
 
     # Create or get feature group for processed features
     feature_group = fs.get_or_create_feature_group(
-        name="aqi_processed_features_store",
+        name="aqi_processed_features_store_clean",
         version=1,
         description="Processed AQI features after cleaning and feature engineering",
-        primary_key=["date"],
+        primary_key=["id"],
         event_time="event_time",
         online_enabled=True
     )
