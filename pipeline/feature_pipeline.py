@@ -66,9 +66,23 @@ def run_feature_pipeline():
 
 
                 # Get the feature group and insert the data
-                fg = fs.get_feature_group(name=f"aqi_features_{horizon}h_prod", version=1)
-                if fg is None:
-                    raise RuntimeError(f"❌ Feature group aqi_features_{horizon}h_prod not found. Please check creation logic.")
+                try:
+                    fg = fs.get_feature_group(name=fg_name, version=1)
+                    print(f"Feature group '{fg_name}' already exists.")
+                except:
+                    print(f"Creating feature group: {fg_name}")
+                    fg = fs.get_or_create_feature_group(
+                        name=fg_name,
+                        version=1,
+                        description=f"Preprocessed AQI features for {horizon}h forecast",
+                        primary_key=["unique_id"],
+                        event_time="event_time",
+                        online_enabled=True,
+                    )
+
+                # Ensure schema is defined (in case the group existed but was empty)
+                fg.save()
+
                 fg.insert(features_df, write_options={"wait_for_job": True})
                 print(f"✅ Inserted {len(features_df)} rows into '{fg.name}'")
 
