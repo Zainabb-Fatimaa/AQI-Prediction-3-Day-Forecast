@@ -27,4 +27,4 @@ jobs:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
           HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
         run: |
-          python pipeline/training_pipeline.py
+          python pipeline/model_training_pipeline.py
