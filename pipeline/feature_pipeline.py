@@ -50,7 +50,7 @@ def run_initial_training_for_horizon(horizon):
     """
     Runs preprocessing, training, and model registration for a given AQI forecast horizon.
     """
-    # project = get_hopsworks_project()
+    project = get_hopsworks_project()
     fs = project.get_feature_store()
     mr = project.get_model_registry()
 
