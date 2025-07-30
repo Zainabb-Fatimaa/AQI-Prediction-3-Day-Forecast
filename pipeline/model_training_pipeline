@@ -7,10 +7,10 @@ from aqi_preprocessor import AQIDataPreprocessor
 from forecasting_system import AQIForecastingSystem
 
 def get_hopsworks_project():
-    project = hopsworks.login(
-        api_key_value=os.environ["HOPSWORKS_API_KEY"],
-        project=os.environ["HOPSWORKS_PROJECT"]
-    )
+     project = hopsworks.login(
+         api_key_value=os.environ["HOPSWORKS_API_KEY"],
+         project=os.environ["HOPSWORKS_PROJECT"]
+     )
     return project
 
 def filter_numeric_metrics(metrics_dict):
@@ -120,11 +120,15 @@ def run_initial_training_for_horizon(horizon):
     }
 
     cleaned_metrics = filter_numeric_metrics(combined_metrics)
+    model_description = (
+        f"AQI forecast model for {horizon}-hour horizon. "
+        f"The best performing model in this version is '{best_model_name}'."
+    )
 
     # 6. Register the Model
     model = mr.python.create_model(
         name=f"aqi_forecast_model_{horizon}h",
-        description=f"AQI forecast model for {horizon}-hour horizon.",
+        description=model_description,
         metrics=cleaned_metrics
     )
 
