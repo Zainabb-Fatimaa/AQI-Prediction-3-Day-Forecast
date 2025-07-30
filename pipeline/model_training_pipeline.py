@@ -7,10 +7,10 @@ from aqi_preprocessor import AQIDataPreprocessor
 from forecasting_system import AQIForecastingSystem
 
 def get_hopsworks_project():
-     project = hopsworks.login(
-         api_key_value=os.environ["HOPSWORKS_API_KEY"],
-         project=os.environ["HOPSWORKS_PROJECT"]
-     )
+    project = hopsworks.login(
+        api_key_value=os.environ["HOPSWORKS_API_KEY"],
+        project=os.environ["HOPSWORKS_PROJECT"]
+    )
     return project
 
 def filter_numeric_metrics(metrics_dict):
