@@ -30,7 +30,7 @@ def ensure_feature_group(fs, fg_name, horizon):
 
 def run_feature_pipeline():
     project = get_hopsworks_project()
-    fs = project.get_feature_store()
+    fs = project.get_feature_store(name='aqi_predict_featurestore')
 
     fg_raw = fs.get_feature_group(name="karachi_raw_data_store", version=1)
     raw_df = fg_raw.read()
