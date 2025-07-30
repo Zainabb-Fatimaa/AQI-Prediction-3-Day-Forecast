@@ -47,7 +47,7 @@ def run_feature_pipeline():
             processed_data = preprocessor.get_processed_data()
             if processed_data and 'full_data' in processed_data:
                 features_df = processed_data['full_data'].copy()
-                features_df["event_time"] = pd.to_datetime(features_df["date"])
+                features_df["event_time"] = pd.to_datetime(features_df.index)
                 features_df['unique_id'] = range(len(features_df))
 
                 fg_name = f"aqi_features_{horizon}h_prod"
