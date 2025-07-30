@@ -28,6 +28,7 @@ def create_feature_groups(fs):
                 event_time="event_time",
                 online_enabled=True,
             )
+    return fg_name
 
 def run_feature_pipeline():
     """
@@ -39,7 +40,7 @@ def run_feature_pipeline():
     fs = project.get_feature_store()
 
     # Create feature groups if they don't exist
-    create_feature_groups(fs)
+    fg_name=create_feature_groups(fs)
 
     fg_old = fs.get_feature_group(name="karachi_raw_data_store", version=1)
     raw_df = fg_old.read() # This is the dataframe from your notebook
