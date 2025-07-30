@@ -20,4 +20,3 @@ catboost
 xgboost
 lightgbm
 joblib
-pickel
