@@ -32,7 +32,7 @@ def run_initial_training_for_horizon(horizon):
     }
 
     if horizon not in horizon_configs:
-        print(f"❌ No configuration found for {horizon}h horizon.")
+        print(f"No configuration found for {horizon}h horizon.")
         return
 
     config = horizon_configs[horizon]
@@ -43,9 +43,9 @@ def run_initial_training_for_horizon(horizon):
     try:
         fg = fs.get_feature_group(name=f"aqi_features_{horizon}h_prod", version=1)
         raw_df = fg.read()
-        print(f"✅ Raw data shape from feature group: {raw_df.shape}")
+        print(f"Raw data shape from feature group: {raw_df.shape}")
     except Exception as e:
-        print(f"❌ Could not read data from feature group: {e}")
+        print(f"Could not read data from feature group: {e}")
         return
 
     # 2. Preprocess Data
@@ -59,16 +59,16 @@ def run_initial_training_for_horizon(horizon):
     )
 
     if not success:
-        print(f"❌ Preprocessing failed for {horizon}h.")
+        print(f"Preprocessing failed for {horizon}h.")
         return
 
     processed_data = preprocessor.get_processed_data()
     if not processed_data or 'full_data' not in processed_data:
-        print(f"❌ Processed data missing for {horizon}h.")
+        print(f"Processed data missing for {horizon}h.")
         return
 
     final_df = processed_data['full_data']
-    print(f"✅ Processed data shape for {horizon}h: {final_df.shape}")
+    print(f"Processed data shape for {horizon}h: {final_df.shape}")
 
     # 3. Run Modeling Pipeline
     forecasting_system = AQIForecastingSystem(
@@ -86,7 +86,7 @@ def run_initial_training_for_horizon(horizon):
     )
 
     if not results:
-        print(f"❌ Modeling failed for {horizon}h. Skipping registration.")
+        print(f"Modeling failed for {horizon}h. Skipping registration.")
         return
 
     # 4. Select Best Model
@@ -103,10 +103,10 @@ def run_initial_training_for_horizon(horizon):
             best_r2 = r2
 
     if not best_model_name:
-        print(f"❌ No valid model found for registration.")
+        print(f"No valid model found for registration.")
         return
 
-    print(f"🏆 Best model for {horizon}h: {best_model_name} with R² = {best_r2:.3f}")
+    print(f"Best model for {horizon}h: {best_model_name} with R² = {best_r2:.3f}")
 
     # 5. Clean and Add Metrics
     def filter_numeric_metrics(metrics_dict):
@@ -133,7 +133,7 @@ def run_initial_training_for_horizon(horizon):
     )
 
     model.save(results['model_save_path'])
-    print(f"✅ Model registered: {model.name} (version {model.version})")
+    print(f"Model registered: {model.name} (version {model.version})")
 
 
 if __name__ == "__main__":
