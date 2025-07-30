@@ -1,7 +1,7 @@
 import os
 import hopsworks
 import pandas as pd
-from aqi_preprocessor.py import AQIDataPreprocessor 
+from aqi_preprocessor import AQIDataPreprocessor 
 
 def get_hopsworks_project():
     """Connects to Hopsworks and returns the project object."""
