@@ -1,6 +1,7 @@
 import os
 import hopsworks
 import pandas as pd
+<<<<<<< HEAD
 import joblib
 
 from aqi_preprocessor import AQIDataPreprocessor
@@ -8,6 +9,9 @@ from forecasting_system import AQIForecastingSystem
 
 Optional: for local development/testing without Hopsworks
 from local_data import existing_df  
+=======
+from aqi_preprocessor import AQIDataPreprocessor 
+>>>>>>> c5ced96a4c2a4a817202b9e66a3d2c613f0bdf74
 
 def get_hopsworks_project():
     project = hopsworks.login(
@@ -16,9 +20,31 @@ def get_hopsworks_project():
     )
     return project
 
+<<<<<<< HEAD
 def filter_numeric_metrics(metrics_dict):
     """Returns a dictionary with only numeric (int/float) values."""
     return {k: v for k, v in metrics_dict.items() if isinstance(v, (int, float))}
+=======
+def get_or_create_feature_group(fs, horizon):
+    """Gets or creates a single feature group in Hopsworks."""
+    fg_name = f"aqi_features_{horizon}h_prod"
+    try:
+        print(f"Getting feature group '{fg_name}'...")
+        fg = fs.get_feature_group(name=fg_name, version=1)
+        print(f"✅ Feature group '{fg_name}' found.")
+        return fg
+    except:
+        print(f"Creating feature group: {fg_name}")
+        fg = fs.get_or_create_feature_group(
+            name=fg_name,
+            version=1,
+            description=f"Preprocessed AQI features for {horizon}h forecast",
+            primary_key=["unique_id"],
+            event_time="event_time",
+            online_enabled=True,
+        )
+        return fg
+>>>>>>> c5ced96a4c2a4a817202b9e66a3d2c613f0bdf74
 
 def run_initial_training_for_horizon(horizon):
     """
@@ -28,6 +54,7 @@ def run_initial_training_for_horizon(horizon):
     fs = project.get_feature_store()
     mr = project.get_model_registry()
 
+<<<<<<< HEAD
     horizon_configs = {
         24: {'max_features': 17, 'train_size': 6*7*24, 'test_size': 3*7*24, 'step_size': 5*24},
         48: {'max_features': 17, 'train_size': 6*7*24, 'test_size': 3*7*24, 'step_size': 5*24},
@@ -138,3 +165,32 @@ def run_initial_training_for_horizon(horizon):
 if __name__ == "__main__":
     for horizon in [24, 48, 72]:
         run_initial_training_for_horizon(horizon)
+=======
+    fg_old = fs.get_feature_group(name="karachi_raw_data_store", version=1)
+    raw_df = fg_old.read()
+
+    for horizon in [24, 48, 72]:
+        print(f"\n--- Processing for {horizon}h horizon ---")
+
+        # Get or create the feature group for the current horizon
+        fg = get_or_create_feature_group(fs, horizon)
+
+        preprocessor = AQIDataPreprocessor(dataframe=raw_df)
+        success = preprocessor.run_full_preprocessing(
+            dataframe=raw_df,
+            forecast_horizon=horizon
+        )
+
+        if success:
+            processed_data = preprocessor.get_processed_data()
+            if processed_data and 'full_data' in processed_data:
+                features_df = processed_data['full_data'].copy()
+                features_df["event_time"] = pd.to_datetime(features_df.index)
+                features_df['unique_id'] = range(len(features_df))
+
+                fg.insert(features_df, write_options={"wait_for_job": True})
+                print(f"✅ Inserted {len(features_df)} rows into '{fg.name}'")
+
+if __name__ == "__main__":
+    run_feature_pipeline()
+>>>>>>> c5ced96a4c2a4a817202b9e66a3d2c613f0bdf74

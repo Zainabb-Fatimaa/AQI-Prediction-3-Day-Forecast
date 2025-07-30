@@ -15,3 +15,7 @@ requests-cache
 retry-requests
 matplotlib
 seaborn
+statsmodels 
+catboost
+xgboost
+lightgbm
