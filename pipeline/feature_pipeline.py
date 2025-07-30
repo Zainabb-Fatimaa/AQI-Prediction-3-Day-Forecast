@@ -47,9 +47,6 @@ def run_feature_pipeline():
             processed_data = preprocessor.get_processed_data()
             if processed_data and 'full_data' in processed_data:
                 features_df = processed_data['full_data'].copy()
-
-                if 'date' in features_df.index.name:
-                    features_df.reset_index(inplace=True)
                 features_df["event_time"] = pd.to_datetime(features_df["date"])
                 features_df['unique_id'] = range(len(features_df))
 
