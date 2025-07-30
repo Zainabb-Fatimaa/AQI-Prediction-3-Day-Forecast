@@ -120,10 +120,7 @@ def run_initial_training_for_horizon(horizon):
     }
 
     cleaned_metrics = filter_numeric_metrics(combined_metrics)
-    model_description = (
-        f"AQI forecast model for {horizon}-hour horizon. "
-        f"The best performing model in this version is '{best_model_name}'."
-    )
+    model_description = f"The best model for {horizon}h is {best_model_name}"
 
     # 6. Register the Model
     model = mr.python.create_model(
