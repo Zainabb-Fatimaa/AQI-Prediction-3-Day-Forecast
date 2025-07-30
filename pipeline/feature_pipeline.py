@@ -67,6 +67,8 @@ def run_feature_pipeline():
 
                 # Get the feature group and insert the data
                 fg = fs.get_feature_group(name=f"aqi_features_{horizon}h_prod", version=1)
+                if fg is None:
+                    raise RuntimeError(f"❌ Feature group aqi_features_{horizon}h_prod not found. Please check creation logic.")
                 fg.insert(features_df, write_options={"wait_for_job": True})
                 print(f"✅ Inserted {len(features_df)} rows into '{fg.name}'")
 
