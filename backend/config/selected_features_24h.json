@@ -1,0 +1,19 @@
+[
+  "aqi",
+  "aqi_48h",
+  "no2_rolling_std_24h_lag24h",
+  "aqi_lag_48h",
+  "aqi_lag_24h",
+  "aqi_lag_36h",
+  "so2_rolling_std_24h_lag24h",
+  "aqi_lag_72h",
+  "co_rolling_std_24h_lag24h",
+  "o3_rolling_std_24h_lag24h",
+  "aqi_lag_96h",
+  "aqi_lag_120h",
+  "aqi_72h",
+  "aqi_rolling_std_72h_lag24h",
+  "aqi_rate_change_72h_lag24h",
+  "aqi_rolling_std_48h_lag24h",
+  "aqi_rate_change_48h_lag24h"
+]

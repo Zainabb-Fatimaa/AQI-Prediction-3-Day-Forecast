@@ -19,5 +19,10 @@ joblib
 slowapi
 pydantic
 python-dotenv
-requests
+xgboost
+statsmodels
+catboost
+lightgbm
 mangum
+matplotlib
+seaborn

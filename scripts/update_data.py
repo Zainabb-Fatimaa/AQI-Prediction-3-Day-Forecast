@@ -26,33 +26,69 @@ def update_aqi_data():
         # Download the data
         dataset_api.download("Resources/aqi_data.csv/aqi_data.csv", local_temp_path, overwrite=True)
         
-        # Read and process the data
-        df = pd.read_csv(local_temp_path)
+        # Read and process the downloaded data
+        new_df = pd.read_csv(local_temp_path)
         
-        # Basic data cleaning
-        df.ffill(inplace=True)
-        df.bfill(inplace=True)
-        df.fillna(df.mean(numeric_only=True), inplace=True)
+        # Basic data cleaning for new data
+        new_df.ffill(inplace=True)
+        new_df.bfill(inplace=True)
+        new_df.fillna(new_df.mean(numeric_only=True), inplace=True)
         
-        # Save to backend directory
+        # Define output path
         output_path = "backend/data/aqi_data.csv"
-        df.to_csv(output_path, index=False)
+        
+        # Check if existing file exists
+        if os.path.exists(output_path):
+            # File exists - update logic
+            print("Existing AQI data file found. Updating...")
+            
+            try:
+                existing_df = pd.read_csv(output_path)
+                
+                # Combine existing and new data
+                # Remove duplicates based on timestamp and city (if these columns exist)
+                if 'timestamp' in new_df.columns and 'city' in new_df.columns:
+                    # Concatenate and remove duplicates
+                    combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+                    combined_df = combined_df.drop_duplicates(subset=['timestamp', 'city'], keep='last')
+                    combined_df = combined_df.sort_values('timestamp') if 'timestamp' in combined_df.columns else combined_df
+                else:
+                    # If no timestamp/city columns, just append new data
+                    combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+                
+                # Save updated data
+                combined_df.to_csv(output_path, index=False)
+                print(f"Successfully updated AQI data: {len(combined_df)} total records ({len(new_df)} new records)")
+                
+            except Exception as e:
+                print(f"Error reading existing file, replacing with new data: {e}")
+                # If error reading existing file, just save new data
+                new_df.to_csv(output_path, index=False)
+                print(f"Replaced AQI data with new file: {len(new_df)} records")
+                
+        else:
+            # File doesn't exist - create new file
+            print("No existing AQI data file found. Creating new file...")
+            new_df.to_csv(output_path, index=False)
+            print(f"Successfully created new AQI data file: {len(new_df)} records")
         
         # Clean up temp file
         if os.path.exists(local_temp_path):
             os.remove(local_temp_path)
         
-        print(f"Successfully updated AQI data: {len(df)} records")
         print(f"Data saved to: {output_path}")
+        
+        # Read final data for summary
+        final_df = pd.read_csv(output_path)
         
         # Create data summary
         summary = {
             "last_updated": datetime.now().isoformat(),
-            "total_records": len(df),
-            "cities": df['city'].unique().tolist() if 'city' in df.columns else [],
+            "total_records": len(final_df),
+            "cities": final_df['city'].unique().tolist() if 'city' in final_df.columns else [],
             "date_range": {
-                "start": df['timestamp'].min() if 'timestamp' in df.columns else None,
-                "end": df['timestamp'].max() if 'timestamp' in df.columns else None
+                "start": final_df['timestamp'].min() if 'timestamp' in final_df.columns else None,
+                "end": final_df['timestamp'].max() if 'timestamp' in final_df.columns else None
             }
         }
         
@@ -90,8 +126,27 @@ def update_feature_data():
                 
                 if not feature_data.empty:
                     output_path = f"backend/data/features_{horizon}h.csv"
-                    feature_data.to_csv(output_path, index=False)
-                    print(f"Updated features for {horizon}h: {len(feature_data)} records")
+                    
+                    # Check if feature file exists
+                    if os.path.exists(output_path):
+                        print(f"Updating existing features for {horizon}h...")
+                        try:
+                            existing_features = pd.read_csv(output_path)
+                            # Combine and deduplicate if needed
+                            combined_features = pd.concat([existing_features, feature_data], ignore_index=True)
+                            # Remove duplicates if timestamp column exists
+                            if 'timestamp' in combined_features.columns:
+                                combined_features = combined_features.drop_duplicates(subset=['timestamp'], keep='last')
+                            combined_features.to_csv(output_path, index=False)
+                            print(f"Updated features for {horizon}h: {len(combined_features)} total records")
+                        except Exception as e:
+                            print(f"Error updating existing features, replacing: {e}")
+                            feature_data.to_csv(output_path, index=False)
+                            print(f"Replaced features for {horizon}h: {len(feature_data)} records")
+                    else:
+                        print(f"Creating new features file for {horizon}h...")
+                        feature_data.to_csv(output_path, index=False)
+                        print(f"Created features for {horizon}h: {len(feature_data)} records")
                 else:
                     print(f"No feature data found for {horizon}h")
                     
