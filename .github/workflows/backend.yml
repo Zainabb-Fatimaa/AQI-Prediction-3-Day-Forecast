@@ -1,16 +1,15 @@
-# .github/workflows/update-models-and-data.yml
 name: Update Models and Data
 
 on:
   schedule:
     # Run every hour for data updates
     - cron: '0 * * * *'
-    # Run every 14 days for model updates (at 2 AM UTC on 1st and 15th)
+    # Run every 14 days for model updates (2 AM UTC on 1st and 15th)
     - cron: '0 2 1,15 * *'
-  workflow_dispatch: # Allow manual trigger
+  workflow_dispatch:
   push:
     branches: [ main ]
-    paths: 
+    paths:
       - '.github/workflows/update-models-and-data.yml'
 
 env:
@@ -21,82 +20,89 @@ jobs:
   update-data:
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' && github.event.schedule == '0 * * * *' || github.event_name == 'workflow_dispatch'
-    
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
 
-    - name: Install dependencies
-      run: |
-        pip install hopsworks pandas numpy joblib
+      - name: Install dependencies
+        run: |
+          pip install hopsworks pandas numpy joblib
 
-    - name: Update AQI Data
-      run: |
-        python scripts/update_data.py
-      env:
-        HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
-        HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+      - name: Update AQI Data (create file if missing)
+        run: |
+          mkdir -p backend/data
+          if [ ! -f backend/data/aqi_data.csv ]; then
+            echo "aqi_data.csv not found, creating..."
+            python scripts/update_data.py
+          else
+            echo "aqi_data.csv exists, updating..."
+            python scripts/update_data.py
+          fi
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
 
-    - name: Commit and push data updates
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add backend/data/aqi_data.csv
-        if git diff --staged --quiet; then
-          echo "No changes to commit"
-        else
-          git commit -m "Update AQI data - $(date)"
-          git push
-        fi
+      - name: Commit and push AQI data
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add backend/data/aqi_data.csv
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update AQI data - $(date -u)"
+            git push https://${{ secrets.PERSONAL_GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
+          fi
 
   update-models:
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' && github.event.schedule == '0 2 1,15 * *' || github.event_name == 'workflow_dispatch'
-    
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
 
-    - name: Install dependencies
-      run: |
-        pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
 
-    - name: Download and Process Models
-      run: |
-        python scripts/download_models.py
-      env:
-        HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
-        HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+      - name: Download and Process Models
+        run: |
+          python scripts/download_models.py
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
 
-    - name: Update AQI Data (with models)
-      run: |
-        python scripts/update_data.py
-      env:
-        HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
-        HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+      - name: Update AQI Data (with models)
+        run: |
+          python scripts/update_data.py
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
 
-    - name: Commit and push data updates
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add backend/data/aqi_data.csv
-        if git diff --staged --quiet; then
-          echo "No changes to commit"
-        else
-          git commit -m "Update AQI data - $(date)"
-          git push https://${{ secrets.PERSONAL_GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
-        fi
+      - name: Commit and push models and data
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add backend/data/aqi_data.csv backend/models/ backend/config/
+          if git diff --staged --quiet; then
+            echo "No model or data changes to commit"
+          else
+            git commit -m "Update models and data - $(date -u)"
+            git push https://${{ secrets.PERSONAL_GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
+          fi
