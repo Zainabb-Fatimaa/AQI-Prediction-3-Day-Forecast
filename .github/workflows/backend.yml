@@ -89,14 +89,14 @@ jobs:
         HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
         HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
 
-    - name: Commit and push model updates
+    - name: Commit and push data updates
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add backend/models/ backend/data/ backend/config/
+        git add backend/data/aqi_data.csv
         if git diff --staged --quiet; then
           echo "No changes to commit"
         else
-          git commit -m "Update models and data - $(date)"
-          git push
+          git commit -m "Update AQI data - $(date)"
+          git push https://${{ secrets.PERSONAL_GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
         fi
