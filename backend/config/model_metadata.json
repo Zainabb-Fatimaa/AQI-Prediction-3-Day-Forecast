@@ -1,11 +1,19 @@
 {
+  "24": {
+    "model_type": "CatBoost",
+    "model_file": "model_24h.cbm",
+    "model_format": "cbm",
+    "version": 7,
+    "features_count": 17,
+    "updated_at": "2025-07-31T19:43:12.066101"
+  },
   "48": {
     "model_type": "ExtraTrees",
     "model_file": "model_48h.pkl",
     "model_format": "pkl",
     "version": 6,
     "features_count": 17,
-    "updated_at": "2025-07-31T19:28:26.009293"
+    "updated_at": "2025-07-31T19:43:17.534374"
   },
   "72": {
     "model_type": "ExtraTrees",
@@ -13,6 +21,6 @@
     "model_format": "pkl",
     "version": 6,
     "features_count": 11,
-    "updated_at": "2025-07-31T19:28:33.916004"
+    "updated_at": "2025-07-31T19:43:22.551931"
   }
 }
