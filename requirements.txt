@@ -20,7 +20,7 @@ slowapi
 pydantic
 python-dotenv
 xgboost
-statsmodel
+statsmodels
 catboost
 lightgmb
 mangum
