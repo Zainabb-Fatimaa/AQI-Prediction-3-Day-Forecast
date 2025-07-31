@@ -1,0 +1,13 @@
+pandas==2.1.4
+numpy==1.26.4
+requests
+python-dotenv
+requests-cache
+retry-requests
+hopsworks==4.2.*
+fastapi 
+uvicorn
+joblib
+slowapi
+pydantic
+mangum
