@@ -1,0 +1,18 @@
+{
+  "48": {
+    "model_type": "ExtraTrees",
+    "model_file": "model_48h.pkl",
+    "model_format": "pkl",
+    "version": 6,
+    "features_count": 17,
+    "updated_at": "2025-07-31T19:28:26.009293"
+  },
+  "72": {
+    "model_type": "ExtraTrees",
+    "model_file": "model_72h.pkl",
+    "model_format": "pkl",
+    "version": 6,
+    "features_count": 11,
+    "updated_at": "2025-07-31T19:28:33.916004"
+  }
+}
