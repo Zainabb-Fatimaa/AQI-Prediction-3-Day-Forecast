@@ -64,7 +64,7 @@ def run_feature_pipeline():
                 # Get the feature group and insert the data
                 fg = fs.get_feature_group(name=f"aqi_features_{horizon}h_prod", version=1)
                 fg.insert(features_df, write_options={"wait_for_job": True})
-                print(f"✅ Inserted {len(features_df)} rows into '{fg.name}'")
+                print(f"Inserted {len(features_df)} rows into '{fg.name}'")
 
 if __name__ == "__main__":
     run_feature_pipeline()
