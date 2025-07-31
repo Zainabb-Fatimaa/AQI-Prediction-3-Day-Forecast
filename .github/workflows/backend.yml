@@ -1,0 +1,102 @@
+# .github/workflows/update-models-and-data.yml
+name: Update Models and Data
+
+on:
+  schedule:
+    # Run every hour for data updates
+    - cron: '0 * * * *'
+    # Run every 14 days for model updates (at 2 AM UTC on 1st and 15th)
+    - cron: '0 2 1,15 * *'
+  workflow_dispatch: # Allow manual trigger
+  push:
+    branches: [ main ]
+    paths: 
+      - '.github/workflows/update-models-and-data.yml'
+
+env:
+  HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+  HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' && github.event.schedule == '0 * * * *' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        pip install hopsworks pandas numpy joblib
+
+    - name: Update AQI Data
+      run: |
+        python scripts/update_data.py
+      env:
+        HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+        HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+
+    - name: Commit and push data updates
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add backend/data/aqi_data.csv
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "Update AQI data - $(date)"
+          git push
+        fi
+
+  update-models:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' && github.event.schedule == '0 2 1,15 * *' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Download and Process Models
+      run: |
+        python scripts/download_models.py
+      env:
+        HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+        HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+
+    - name: Update AQI Data (with models)
+      run: |
+        python scripts/update_data.py
+      env:
+        HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+        HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+
+    - name: Commit and push model updates
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add backend/models/ backend/data/ backend/config/
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "Update models and data - $(date)"
+          git push
+        fi
