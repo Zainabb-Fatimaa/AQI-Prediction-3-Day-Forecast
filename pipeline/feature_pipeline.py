@@ -41,10 +41,10 @@ def run_feature_pipeline():
     # Create feature groups if they don't exist
     create_feature_groups(fs)
 
+    # Read raw data
     fg_old = fs.get_feature_group(name="karachi_raw_data_store", version=1)
-    raw_df = fg_old.read() # This is the dataframe from your notebook
+    raw_df = fg_old.read()
 
-    # 2. Run Preprocessing and Insert for Each Horizon
     for horizon in [24, 48, 72]:
         print(f"\n--- Processing for {horizon}h horizon ---")
         preprocessor = AQIDataPreprocessor(dataframe=raw_df)
@@ -60,11 +60,16 @@ def run_feature_pipeline():
                 features_df["event_time"] = pd.to_datetime(features_df.index)
                 features_df['unique_id'] = range(len(features_df))
 
-
-                # Get the feature group and insert the data
+                # Get feature group
                 fg = fs.get_feature_group(name=f"aqi_features_{horizon}h_prod", version=1)
+
+                # Align DataFrame to schema
+                schema_cols = [feature.name for feature in fg.schema()]
+                features_df = features_df[[col for col in features_df.columns if col in schema_cols]]
+
+                # Insert into feature group
                 fg.insert(features_df, write_options={"wait_for_job": True})
                 print(f"Inserted {len(features_df)} rows into '{fg.name}'")
-
+                
 if __name__ == "__main__":
     run_feature_pipeline()
