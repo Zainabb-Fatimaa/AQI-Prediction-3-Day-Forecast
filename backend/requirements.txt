@@ -5,3 +5,8 @@ numpy
 joblib
 pydantic
 slowapi
+catboost
+xgboost
+lightgbm
+slowapi
+python-multipart

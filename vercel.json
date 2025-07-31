@@ -5,7 +5,12 @@
       "src": "backend/main.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": ["backend/requirements.txt"]
+        "includeFiles": [
+          "backend/requirements.txt",
+          "backend/models/**",
+          "backend/data/**",
+          "backend/config/**"
+        ]
       }
     }
   ],
