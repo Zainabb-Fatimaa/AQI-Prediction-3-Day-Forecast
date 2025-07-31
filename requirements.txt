@@ -22,7 +22,7 @@ python-dotenv
 xgboost
 statsmodels
 catboost
-lightgmb
+lightgbm
 mangum
 matplotlib
 seaborn
