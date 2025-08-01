@@ -1,4 +1,3 @@
-# main.py - Lightweight FastAPI app for Vercel deployment
 import os
 import json
 import pandas as pd
@@ -10,7 +9,7 @@ import logging
 
 from fastapi import FastAPI, HTTPException, Query, Depends, Request
 from pydantic import BaseModel, conint
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,7 +28,13 @@ app = FastAPI(
 # Rate limiting
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=429,
+        content={"detail": f"Rate limit exceeded: {exc.detail}"}
+    )
 
 # CORS Middleware
 origins = [
@@ -63,7 +68,7 @@ def load_models_and_data():
     
     try:
         # Get the base directory (parent of current directory to go back to root)
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        base_dir = os.path.dirname(os.path.abspath(__file__))
         
         # Load model metadata
         metadata_path = os.path.join(base_dir, "config", "model_metadata.json")
@@ -123,7 +128,7 @@ def load_models_and_data():
         aqi_data_path = os.path.join(base_dir, "data", "aqi_data.csv")
         if os.path.exists(aqi_data_path):
             aqi_data = pd.read_csv(aqi_data_path)
-            aqi_data['timestamp'] = pd.to_datetime(aqi_data['timestamp'])
+            aqi_data['timestamp'] = pd.to_datetime(aqi_data['timestamp'], format='mixed', errors='coerce')
             logger.info(f"Loaded AQI data: {len(aqi_data)} records")
         
         # Load feature data for each horizon
@@ -307,7 +312,7 @@ async def root(request: Request):
 @limiter.limit("10/minute")
 async def get_forecast(
     request: Request,
-    horizon: Optional[conint(ge=24, le=72)] = Query(None, description="Specific horizon (24, 48, or 72). If not provided, returns all.")
+    horizon: Optional[int] = Query(None, ge=24, le=72, description="Specific horizon (24, 48, or 72). If not provided, returns all.")
 ):
     """
     Provides an AQI forecast for Karachi using pre-loaded models and features.
@@ -372,8 +377,25 @@ async def get_hourly_forecast(
             raise HTTPException(status_code=404, detail="No historical data for Karachi")
 
         latest_data = df_karachi.loc[df_karachi['timestamp'].idxmax()]
-        current_aqi = float(latest_data['aqi'])
+        
+        # Safe conversion that handles both Series and scalar values
+        aqi_value = latest_data['aqi']
+        if isinstance(aqi_value, pd.Series):
+            current_aqi = float(aqi_value.iloc[0])
+        else:
+            current_aqi = float(aqi_value)
+        
+        # Convert start_time to proper Python datetime
         start_time = latest_data['timestamp']
+        if isinstance(start_time, pd.Series):
+            start_time = start_time.iloc[0]
+        
+        if hasattr(start_time, 'to_pydatetime'):
+            base_time = start_time.to_pydatetime()
+        elif isinstance(start_time, pd.Timestamp):
+            base_time = start_time.to_pydatetime()
+        else:
+            base_time = start_time
 
         # Get major forecasts (24, 48, 72h)
         major_forecasts = {}
@@ -388,8 +410,8 @@ async def get_hourly_forecast(
         known_points_y = [current_aqi] + list(major_forecasts.values())
 
         # Determine target hours
-        if horizon.lower() == "next 3 days":
-            target_hours = np.arange(1, 25)
+        if horizon is None or horizon.lower() == "next 3 days":
+            target_hours = np.arange(1, 73)
         else:
             try:
                 horizon_hours = int(horizon)
@@ -405,7 +427,8 @@ async def get_hourly_forecast(
         # Format response
         hourly_forecasts = []
         for i, hour in enumerate(target_hours):
-            forecast_time = start_time + timedelta(hours=int(hour))
+            # Use base_time (converted datetime) instead of start_time
+            forecast_time = base_time + timedelta(hours=int(hour))
             predicted_aqi = round(float(hourly_aqi_values[i]), 2)
             
             hourly_forecasts.append(HourlyForecast(
@@ -466,7 +489,7 @@ async def get_locations(request: Request):
 async def get_historical_data(
     request: Request, 
     location: str, 
-    days: conint(ge=1, le=30) = Query(default=7, description="Number of days (max 30)")
+    days: int = Query(default=7, ge=1, le=30, description="Number of days (max 30)")  
 ):
     """
     Provides historical weather and pollutant data for a specific city.
@@ -493,11 +516,26 @@ async def get_historical_data(
             raise HTTPException(status_code=500, detail=f"Missing columns in data: {missing_columns}")
 
         df_response = df_filtered[required_columns].copy()
-        df_response = df_response.fillna(method='ffill').fillna(method='bfill')
+        
+        df_response = df_response.ffill().bfill()
+        
         df_response = df_response.sort_values('timestamp')
 
-        # Convert to records
-        records = df_response.to_dict(orient='records')
+        # Convert pandas timestamps to Python datetimes for Pydantic compatibility
+        df_response['timestamp'] = pd.to_datetime(df_response['timestamp'])
+        
+        # Convert to records and handle timestamp conversion
+        records = []
+        for _, row in df_response.iterrows():
+            record = row.to_dict()
+            # Convert pandas timestamp to Python datetime
+            timestamp_val = record['timestamp']
+            if hasattr(timestamp_val, 'to_pydatetime'):
+                record['timestamp'] = timestamp_val.to_pydatetime()
+            elif isinstance(timestamp_val, pd.Timestamp):
+                record['timestamp'] = timestamp_val.to_pydatetime()
+            records.append(record)
+
         historical_data = [HistoricalData(**record) for record in records]
 
         return HistoricalResponse(location=location, data=historical_data)
@@ -505,7 +543,7 @@ async def get_historical_data(
     except Exception as e:
         logger.error(f"Error in get_historical_data: {e}")
         raise HTTPException(status_code=500, detail=f"Could not retrieve historical data: {str(e)}")
-
+    
 @app.get("/dashboard/overview", response_model=DashboardOverview)
 @limiter.limit("10/minute")
 async def get_dashboard_overview(
@@ -523,9 +561,16 @@ async def get_dashboard_overview(
         if df_location.empty:
             raise HTTPException(status_code=404, detail=f"No data found for city: {location}")
 
-        # Get latest data point
-        latest_data = df_location.loc[df_location['timestamp'].idxmax()]
-        current_aqi = float(latest_data['aqi'])
+        # Get latest data point - fix the indexing issue
+        latest_idx = df_location['timestamp'].idxmax()
+        latest_data = df_location.loc[latest_idx]
+        
+        # Handle AQI value properly
+        aqi_value = latest_data['aqi']
+        if isinstance(aqi_value, pd.Series):
+            current_aqi = float(aqi_value.iloc[0])
+        else:
+            current_aqi = float(aqi_value)  
 
         # Calculate weekly average
         week_ago = datetime.now() - timedelta(days=7)
@@ -539,13 +584,26 @@ async def get_dashboard_overview(
 
         trend_direction = calculate_trend_direction(weekly_avg, older_avg)
 
-        # Format last updated
+        # Format last updated - fix pandas timestamp handling
         last_updated = "Unknown"
-        if pd.notna(latest_data['timestamp']):
+        timestamp_value = latest_data['timestamp']
+        
+        # Handle both scalar and Series cases for timestamp
+        if isinstance(timestamp_value, pd.Series):
+            timestamp_value = timestamp_value.iloc[0]
+        
+        if pd.notna(timestamp_value):
             try:
-                last_updated = latest_data['timestamp'].strftime("%Y-%m-%d %H:%M")
-            except:
-                last_updated = str(latest_data['timestamp'])
+                # Convert pandas timestamp to Python datetime if needed
+                if hasattr(timestamp_value, 'to_pydatetime'):
+                    dt = timestamp_value.to_pydatetime()
+                elif isinstance(timestamp_value, pd.Timestamp):
+                    dt = timestamp_value.to_pydatetime()
+                else:
+                    dt = timestamp_value
+                last_updated = dt.strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                last_updated = str(timestamp_value)
 
         return DashboardOverview(
             location=location,
@@ -559,7 +617,6 @@ async def get_dashboard_overview(
     except Exception as e:
         logger.error(f"Error in get_dashboard_overview: {e}")
         raise HTTPException(status_code=500, detail=f"Could not retrieve dashboard overview: {str(e)}")
-
 # For Vercel deployment
 if __name__ == "__main__":
     import uvicorn

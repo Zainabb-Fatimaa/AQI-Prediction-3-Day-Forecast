@@ -1,12 +1,12 @@
 fastapi
-uvicorn
+uvicorn[standard]
 pandas
 numpy
 joblib
-pydantic
-slowapi
+scikit-learn
 catboost
 xgboost
 lightgbm
 slowapi
+pydantic
 python-multipart
