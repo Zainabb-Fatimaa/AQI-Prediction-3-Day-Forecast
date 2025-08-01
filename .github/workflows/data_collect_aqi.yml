@@ -26,4 +26,4 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run AQI data collection script
-        run: python data_collect_aqi.py
+        run: python pipeline/data_collect_aqi.py
