@@ -1,8 +1,0 @@
-name: data-collect-aqi-daily
-schedule: '0 2 * * *'  # Run daily at 2 AM UTC
-script: data_collect_aqi_daily.py
-description: |
-  Collects AQI and weather data for Karachi, processes, and uploads to Hopsworks feature store. Replicates logic from data_collect_aqi.ipynb for daily automation.
-env:
-  HOPSWORKS_API_KEY: ${HOPSWORKS_API_KEY}
-  HOPSWORKS_PROJECT: ${HOPSWORKS_PROJECT}

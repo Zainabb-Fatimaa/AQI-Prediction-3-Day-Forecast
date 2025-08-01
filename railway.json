@@ -1,4 +1,0 @@
-{
-  "buildCommand": "pip install -r backend/requirements.txt",
-  "startCommand": "python3 backend/main.py"
-}
