@@ -24,12 +24,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: Create backend directories
-      run: |
-        mkdir -p backend/data
-        mkdir -p backend/models
-        mkdir -p backend/config
-        
     - name: Run feature extraction script
       env:
         HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
@@ -54,17 +48,17 @@ jobs:
           wc -l backend/data/horizon_72h_data.csv
         fi
         
-    - name: Commit and push changes
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add backend/data/*.csv
-        if git diff --staged --quiet; then
-          echo "No changes to commit"
-        else
-          git commit -m "Update feature data - $(date '+%Y-%m-%d %H:%M:%S')"
-          git push
-        fi
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        - name: Commit and push changes
+          env:
+            PERSONAL_GITHUB_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+          run: |
+            git config --global user.email "action@github.com"
+            git config --global user.name "GitHub Action"
+            git add backend/data/*.csv
+            if git diff --cached --quiet; then
+              echo "No changes to commit"
+            else
+              git commit -m "Update feature data - $(date '+%Y-%m-%d %H:%M:%S')"
+              git push https://${{ secrets.PERSONAL_GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
+            fi
         
