@@ -1,3 +1,5 @@
+name: Update Models and Data
+
 on:
   schedule:
     # Run every hour for data updates
@@ -9,25 +11,31 @@ on:
     branches: [ main ]
     paths:
       - '.github/workflows/update-models-and-data.yml'
+
 env:
   HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
   HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+
 jobs:
   update-data:
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' && github.event.schedule == '0 * '* || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'schedule' && github.event.schedule == '0 * * * *' || github.event_name == 'workflow_dispatch'
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
+
       - name: Install dependencies
         run: |
           pip install hopsworks pandas numpy joblib
+
       - name: Update AQI Data (create file if missing)
         run: |
           mkdir -p backend/data
@@ -41,6 +49,7 @@ jobs:
         env:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
           HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+
       - name: Commit and push AQI data
         run: |
           git config --local user.email "action@github.com"
@@ -52,33 +61,40 @@ jobs:
             git commit -m "Update AQI data - $(date -u)"
             git push https://${{ secrets.PERSONAL_GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
           fi
+
   update-models:
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' && github.event.schedule == '0 2 1,15 *'* || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'schedule' && github.event.schedule == '0 2 1,15 * *' || github.event_name == 'workflow_dispatch'
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
+
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
+
       - name: Download and Process Models
         run: |
           python scripts/download_models.py
         env:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
           HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+
       - name: Update AQI Data (with models)
         run: |
           python scripts/update_data.py
         env:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
           HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+
       - name: Commit and push models and data
         run: |
           git config --local user.email "action@github.com"
