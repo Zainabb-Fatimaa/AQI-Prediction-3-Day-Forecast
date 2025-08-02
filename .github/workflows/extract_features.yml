@@ -1,0 +1,77 @@
+name: Biweekly Feature Data Extraction
+
+on:
+  schedule:
+    # Run every 2 weeks on Monday at 8:00 AM UTC
+    - cron: '0 8 * * 1/2'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  extract-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas hopsworks
+        
+    - name: Create backend directories
+      run: |
+        mkdir -p backend/data
+        mkdir -p backend/models
+        mkdir -p backend/config
+        
+    - name: Run feature extraction script
+      env:
+        HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+        HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+      run: |
+        python scripts/features_data.py
+        
+    - name: Check extracted files
+      run: |
+        echo "Checking extracted CSV files:"
+        ls -la backend/data/
+        if [ -f "backend/data/horizon_24h_data.csv" ]; then
+          echo "24h data file created successfully"
+          wc -l backend/data/horizon_24h_data.csv
+        fi
+        if [ -f "backend/data/horizon_48h_data.csv" ]; then
+          echo "48h data file created successfully"
+          wc -l backend/data/horizon_48h_data.csv
+        fi
+        if [ -f "backend/data/horizon_72h_data.csv" ]; then
+          echo "72h data file created successfully"
+          wc -l backend/data/horizon_72h_data.csv
+        fi
+        
+    - name: Commit and push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add backend/data/*.csv
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "Update feature data - $(date '+%Y-%m-%d %H:%M:%S')"
+          git push
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Upload artifacts (optional)
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: extracted-data
+        path: backend/data/*.csv
+        retention-days: 30
