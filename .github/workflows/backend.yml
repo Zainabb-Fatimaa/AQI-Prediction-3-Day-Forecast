@@ -123,7 +123,7 @@ jobs:
       - name: Extract latest features data for models
         run: |
           echo "Extracting latest features data for model training..."
-          python scripts/extract_features_data.py
+          python scripts/features_data.py
         env:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
           HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
@@ -169,7 +169,7 @@ jobs:
       - name: Extract features data after config change
         run: |
           echo "Feature configuration changed, extracting new data..."
-          python scripts/extract_features_data.py
+          python scripts/features_data.py
         env:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
           HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
