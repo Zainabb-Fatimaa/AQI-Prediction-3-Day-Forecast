@@ -11,7 +11,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-        token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}  # Add this line!
+        token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
         
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -46,13 +46,14 @@ jobs:
         
     - name: Commit and push only horizon data CSVs
       run: |
-        git config --local user.email "action@github.com"  # Also change to --local like the working file
+        git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         git add backend/data/horizon_24h_data.csv || true
         git add backend/data/horizon_48h_data.csv || true
         git add backend/data/horizon_72h_data.csv || true
-        if git diff --staged --quiet; then  # Change --cached to --staged like the working file
+        if git diff --staged --quiet; then
           echo "No changes to commit"
         else
-          git commit -m "Update horizon feature data - $(date -u)"  # Use -u flag like the working file
+          git commit -m "Update horizon feature data - $(date -u)"
           git push https://${{ secrets.PERSONAL_GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
+        fi
