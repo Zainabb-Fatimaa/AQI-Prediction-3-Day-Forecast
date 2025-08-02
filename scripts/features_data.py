@@ -1,0 +1,136 @@
+import os
+import json
+import pandas as pd
+import hopsworks
+
+def ensure_directories():
+    """Create necessary directories"""
+    directories = [
+        'backend/models',
+        'backend/data',
+        'backend/config'
+    ]
+    for directory in directories:
+        os.makedirs(directory, exist_ok=True)
+
+def get_hopsworks_project():
+    """Login to Hopsworks and return the project"""
+    project = hopsworks.login(
+        api_key_value=os.environ["HOPSWORKS_API_KEY"],
+        project=os.environ["HOPSWORKS_PROJECT"]
+    )
+    return project
+
+def load_selected_features(horizon):
+    """Load selected features for a given horizon from config file"""
+    config_path = f'backend/config/selected_features{horizon}h.json'
+    try:
+        with open(config_path, 'r') as f:
+            selected_features = json.load(f)
+        return selected_features
+    except FileNotFoundError:
+        print(f" Config file not found: {config_path}")
+        return None
+    except json.JSONDecodeError:
+        print(f" Invalid JSON in config file: {config_path}")
+        return None
+
+def extract_horizon_data(horizon, project):
+    """Extract filtered data for a specific horizon and save to CSV"""
+    print(f"--- Processing {horizon}h horizon ---")
+    
+    try:
+        # Get feature store
+        fs = project.get_feature_store()
+        
+        # Load selected features from config
+        selected_features = load_selected_features(horizon)
+        if not selected_features:
+            print(f" No selected features found for {horizon}h. Skipping.")
+            return None
+        
+        print(f"Loading {len(selected_features)} selected features...")
+        
+        # Get the feature group for the current horizon
+        fg_name = f"aqi_features_{horizon}h_prod"
+        fg = fs.get_feature_group(name=fg_name, version=1)
+        
+        # Read all data from the feature group
+        all_data_df = fg.read()
+        
+        # Filter columns - only keep features that exist in both selected_features and dataframe
+        available_features = [feature for feature in selected_features if feature in all_data_df.columns]
+        
+        if len(available_features) != len(selected_features):
+            missing_features = set(selected_features) - set(available_features)
+            print(f" Features not found in dataframe: {missing_features}")
+        
+        if not available_features:
+            print(f" No valid features found for {horizon}h horizon")
+            return None
+        
+        print(f"Found {len(available_features)} valid features")
+        
+        # Create filtered dataframe with only selected features
+        filtered_df = all_data_df[available_features].copy()
+        
+        # Get the latest 72 rows
+        latest_72_rows = filtered_df.tail(72)
+        
+        # Save to CSV file
+        csv_filename = f'backend/data/horizon_{horizon}h_data.csv'
+        latest_72_rows.to_csv(csv_filename, index=False)
+        
+        print(f" Saved latest 72 rows for {horizon}h to {csv_filename}")
+        print(f"Data shape: {latest_72_rows.shape}")
+        
+        return latest_72_rows
+        
+    except Exception as e:
+        print(f" Failed to process {horizon}h horizon: {e}")
+        return None
+
+def extract_all_horizons_data():
+    """Extract data for all horizons (24h, 48h, 72h)"""
+    # Ensure directories exist
+    ensure_directories()
+    
+    # Get Hopsworks project
+    project = get_hopsworks_project()
+    
+    # Dictionary to store the extracted dataframes
+    horizon_data = {}
+    
+    # Process each horizon
+    horizons = [24, 48, 72]
+    
+    for horizon in horizons:
+        data = extract_horizon_data(horizon, project)
+        if data is not None:
+            horizon_data[horizon] = data
+    
+    # Display summary of extracted data
+    print("\n--- Summary of Extracted Data ---")
+    for horizon, df in horizon_data.items():
+        print(f"{horizon}h horizon: {df.shape[0]} rows × {df.shape[1]} features")
+        print(f"Features: {list(df.columns)}")
+        print()
+    
+    return horizon_data
+
+def extract_single_horizon_data(horizon):
+    """Extract data for a single horizon"""
+    # Ensure directories exist
+    ensure_directories()
+    
+    # Get Hopsworks project
+    project = get_hopsworks_project()
+    
+    # Extract data for the specified horizon
+    return extract_horizon_data(horizon, project)
+
+# Example usage:
+if __name__ == "__main__":
+    # Extract data for all horizons
+    all_data = extract_all_horizons_data()
+    
