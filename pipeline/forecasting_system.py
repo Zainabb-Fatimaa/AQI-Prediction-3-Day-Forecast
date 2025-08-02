@@ -53,14 +53,14 @@ class AQIForecastingSystem:
         # Create model save directory
         os.makedirs(self.model_save_path, exist_ok=True)
 
-        print(f"📥 Initialized for {horizon_hours}h horizon")
-        print(f"📊 Dataset shape: {self.df.shape}")
-        print(f"🎯 Target column: {target_column}")
-        print(f"💾 Model save path: {self.model_save_path}")
+        print(f" Initialized for {horizon_hours}h horizon")
+        print(f" Dataset shape: {self.df.shape}")
+        print(f" Target column: {target_column}")
+        print(f" Model save path: {self.model_save_path}")
 
     def validate_data_quality(self):
         """Validate data quality for the specific horizon"""
-        print(f"🔍 Validating data quality for {self.horizon_hours}h horizon...")
+        print(f" Validating data quality for {self.horizon_hours}h horizon...")
 
         issues = []
 
@@ -106,17 +106,17 @@ class AQIForecastingSystem:
             issues.append(f"{len(high_missing_features)} features have >80% missing values")
 
         if issues:
-            print("⚠️ Data quality issues found:")
+            print(" Data quality issues found:")
             for issue in issues:
                 print(f"   • {issue}")
         else:
-            print("✅ Data quality checks passed")
+            print("Data quality checks passed")
 
         return issues
 
     def handle_outliers(self, data, method='iqr', cap_percentile=0.01):
         """Handle outliers in features before selection"""
-        print("🔧 Handling outliers in features...")
+        print(" Handling outliers in features...")
 
         data_cleaned = data.copy()
         outlier_counts = {}
@@ -189,7 +189,7 @@ class AQIForecastingSystem:
 
     def cross_validated_feature_selection(self, X, y, n_splits=3, max_features=15):
         """Perform hybrid cross-validated feature selection (MI + RF scores)"""
-        print(f"   🔄 Hybrid feature selection for {self.horizon_hours}h horizon...")
+        print(f"    Hybrid feature selection for {self.horizon_hours}h horizon...")
 
         tscv = TimeSeriesSplit(n_splits=n_splits)
         mi_score_total = {}
@@ -207,7 +207,7 @@ class AQIForecastingSystem:
                     mi_score_total[feat] = mi_score_total.get(feat, 0) + score
                     fold_counts[feat] = fold_counts.get(feat, 0) + 1
             except Exception as e:
-                print(f"     ⚠️ MI selection failed in fold {fold}: {e}")
+                print(f"      MI selection failed in fold {fold}: {e}")
 
             # Random Forest
             try:
@@ -216,7 +216,7 @@ class AQIForecastingSystem:
                     rf_score_total[feat] = rf_score_total.get(feat, 0) + score
                     fold_counts[feat] = fold_counts.get(feat, 0) + 1
             except Exception as e:
-                print(f"     ⚠️ RF selection failed in fold {fold}: {e}")
+                print(f"      RF selection failed in fold {fold}: {e}")
 
         # Normalize and combine scores
         all_features = set(mi_score_total.keys()) | set(rf_score_total.keys())
@@ -232,8 +232,8 @@ class AQIForecastingSystem:
         sorted_features = sorted(hybrid_scores.items(), key=lambda x: x[1], reverse=True)
         final_features = [f for f, _ in sorted_features[:max_features]]
 
-        print(f"     ✅ Selected {len(final_features)} features")
-        print(f"     🔝 Top 5 features: {final_features[:5]}")
+        print(f"      Selected {len(final_features)} features")
+        print(f"      Top 5 features: {final_features[:5]}")
 
         return final_features, {
             'hybrid_scores': hybrid_scores,
@@ -242,14 +242,14 @@ class AQIForecastingSystem:
 
     def feature_selection_pipeline(self, max_features=15):
         """Complete feature selection pipeline for the specific horizon"""
-        print(f"🎯 Starting feature selection for {self.horizon_hours}h horizon...")
+        print(f" Starting feature selection for {self.horizon_hours}h horizon...")
 
         # Get all potential feature columns (exclude target and metadata)
         exclude_cols = [self.target_column, "date", "event_time", "unique_id"]
         all_features = [col for col in self.df.columns if col not in exclude_cols]
 
         if not all_features:
-            print(f"❌ No features found for selection")
+            print(f" No features found for selection")
             self.selected_features = []
             return {}
 
@@ -265,7 +265,7 @@ class AQIForecastingSystem:
         print(f"   After missing value filter: {len(filtered_features)} features")
 
         if not filtered_features:
-            print(f"❌ No features passed missing value filter")
+            print(f" No features passed missing value filter")
             self.selected_features = []
             return {}
 
@@ -284,7 +284,7 @@ class AQIForecastingSystem:
         print(f"   After variance filter: {len(variance_filtered_features)} features")
 
         if not variance_filtered_features:
-            print(f"❌ No features passed variance filter")
+            print(f" No features passed variance filter")
             self.selected_features = []
             return {}
 
@@ -323,7 +323,7 @@ class AQIForecastingSystem:
             correlation_filtered_features = variance_filtered_features
 
         if not correlation_filtered_features:
-            print(f"❌ No features passed correlation filter")
+            print(f" No features passed correlation filter")
             self.selected_features = []
             return {}
 
@@ -337,7 +337,7 @@ class AQIForecastingSystem:
         y_target = y_target[valid_rows]
 
         if len(X_features) < 100:
-            print(f"❌ Insufficient clean data: {len(X_features)} rows")
+            print(f" Insufficient clean data: {len(X_features)} rows")
             self.selected_features = []
             return {}
 
@@ -358,20 +358,20 @@ class AQIForecastingSystem:
                 'selected_features': selected_features
             }
 
-            print(f"   ✅ Final selected features: {len(selected_features)}")
+            print(f"    Final selected features: {len(selected_features)}")
             if selected_features:
-                print(f"   🔝 Top 5 features: {selected_features[:5]}")
+                print(f"    Top 5 features: {selected_features[:5]}")
 
             return feature_selection_details
 
         except Exception as e:
-            print(f"❌ Error in feature selection: {e}")
+            print(f" Error in feature selection: {e}")
             self.selected_features = []
             return {}
 
     def check_data_leakage(self):
         """Check for data leakage in selected features"""
-        print("🔍 Checking for data leakage...")
+        print(" Checking for data leakage...")
 
         if not self.selected_features:
             print("   No features selected to check")
@@ -401,20 +401,20 @@ class AQIForecastingSystem:
         }
 
         if high_corr_features or suspicious_features:
-            print(f"     ⚠️ Potential leakage detected:")
+            print(f"      Potential leakage detected:")
             if high_corr_features:
                 print(f"       High correlation (>0.95): {high_corr_features}")
             if suspicious_features:
                 print(f"       Suspicious names: {suspicious_features}")
         else:
-            print(f"     ✅ No obvious leakage detected")
+            print(f"      No obvious leakage detected")
             print(f"       Max correlation: {correlations.max():.3f}")
 
         return leakage_results
 
     def initialize_models(self):
         """Initialize all tree-based models"""
-        print("🌲 Initializing tree-based models...")
+        print(" Initializing tree-based models...")
 
         self.model_configs = {
             'CatBoost': CatBoostRegressor(
@@ -555,21 +555,21 @@ class AQIForecastingSystem:
 
     def expanding_window_validation(self, train_size=5*7*24, test_size=3*24, step_size=3*24):
         """Perform expanding window validation"""
-        print(f"🔁 Starting expanding window validation for {self.horizon_hours}h horizon...")
-        print(f"📊 Parameters: train_size={train_size}, test_size={test_size}, step_size={step_size}")
+        print(f" Starting expanding window validation for {self.horizon_hours}h horizon...")
+        print(f" Parameters: train_size={train_size}, test_size={test_size}, step_size={step_size}")
 
         if not self.selected_features:
-            print("❌ No features selected! Run feature selection first.")
+            print(" No features selected! Run feature selection first.")
             return
 
         # Check if selected features exist in dataframe
         valid_features = [f for f in self.selected_features if f in self.df.columns]
         if not valid_features:
-            print("❌ No valid selected features found in dataframe")
+            print(" No valid selected features found in dataframe")
             return
 
         total_samples = len(self.df)
-        print(f"📏 Total samples: {total_samples}, Using {len(valid_features)} features")
+        print(f" Total samples: {total_samples}, Using {len(valid_features)} features")
 
         # Generate expanding windows
         windows = []
@@ -590,10 +590,10 @@ class AQIForecastingSystem:
             train_end += step_size
 
         if not windows:
-            print("❌ Not enough data for expanding window validation!")
+            print(" Not enough data for expanding window validation!")
             return
 
-        print(f"🔄 Created {len(windows)} expanding windows")
+        print(f" Created {len(windows)} expanding windows")
 
         # Initialize results storage
         self.results = {model_name: [] for model_name in self.model_configs.keys()}
@@ -720,20 +720,20 @@ class AQIForecastingSystem:
                 print(f"    Error processing fold {fold}: {str(e)}")
                 continue
 
-        print(f"✅ Completed {len(windows)} windows of expanding validation")
+        print(f" Completed {len(windows)} windows of expanding validation")
 
     def train_final_models(self):
         """Train final models on the entire dataset"""
-        print(f"🎯 Training final models for {self.horizon_hours}h horizon...")
+        print(f" Training final models for {self.horizon_hours}h horizon...")
 
         if not self.selected_features:
-            print("❌ No features selected! Run feature selection first.")
+            print(" No features selected! Run feature selection first.")
             return
 
         # Check if selected features exist in dataframe
         valid_features = [f for f in self.selected_features if f in self.df.columns]
         if not valid_features:
-            print("❌ No valid selected features found in dataframe")
+            print(" No valid selected features found in dataframe")
             return
 
         # Initialize deployment models storage
@@ -771,20 +771,20 @@ class AQIForecastingSystem:
                     # Store final model
                     self.deployment_models[model_name] = model
 
-                    print(f"   ✅ {model_name} trained ({len(valid_features)} features)")
+                    print(f"    {model_name} trained ({len(valid_features)} features)")
 
                 except Exception as e:
-                    print(f"   ❌ Error training final {model_name}: {str(e)}")
+                    print(f"    Error training final {model_name}: {str(e)}")
                     continue
 
         except Exception as e:
-            print(f"   ❌ Error preparing data: {str(e)}")
+            print(f"    Error preparing data: {str(e)}")
 
-        print("✅ Final model training completed")
+        print(" Final model training completed")
 
     def save_models(self, save_metadata=True):
         """Save all trained models and metadata"""
-        print("💾 Saving models and metadata...")
+        print("Saving models and metadata...")
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -807,16 +807,16 @@ class AQIForecastingSystem:
                     if model_name == 'CatBoost':
                         model.save_model(os.path.join(model_dir, f"{model_name}_{self.horizon_hours}h.cbm"))
                     elif model_name == 'XGBoost':
-                        model.save_model(os.path.join(model_dir, f"{model_name}_{self.horizon_hours}h.json"))
+                       joblib.dump(model, os.path.join(model_dir, f"{model_name}_{self.horizon_hours}h.joblib"))
                     elif model_name == 'LightGBM':
-                        model.booster_.save_model(os.path.join(model_dir, f"{model_name}_{self.horizon_hours}h.txt"))
+                        joblib.dump(model, os.path.join(model_dir, f"{model_name}_{self.horizon_hours}h.joblib"))
                     else:
                         joblib.dump(model, os.path.join(model_dir, f"{model_name}_{self.horizon_hours}h.pkl"))
 
-                    print(f"   ✅ Saved {model_name}")
+                    print(f"    Saved {model_name}")
 
                 except Exception as e:
-                    print(f"   ❌ Error saving {model_name}: {str(e)}")
+                    print(f"    Error saving {model_name}: {str(e)}")
 
         # Save ensemble configurations
         ensemble_dir = os.path.join(save_dir, "ensemble_models")
@@ -851,12 +851,12 @@ class AQIForecastingSystem:
         with open(os.path.join(save_dir, "selected_features.json"), 'w') as f:
             json.dump(self.selected_features, f, indent=2)
 
-        print(f"✅ All models and metadata saved to: {save_dir}")
+        print(f" All models and metadata saved to: {save_dir}")
         return save_dir
 
     def load_models(self, model_dir):
         """Load saved models for prediction"""
-        print(f"📥 Loading models from: {model_dir}")
+        print(f" Loading models from: {model_dir}")
 
         # Load metadata
         metadata_path = os.path.join(model_dir, "metadata.json")
@@ -866,7 +866,7 @@ class AQIForecastingSystem:
             self.selected_features = metadata.get('selected_features', [])
             self.target_column = metadata.get('target_column', '')
             self.horizon_hours = metadata.get('horizon_hours', 0)
-            print(f"   ✅ Loaded metadata for {self.horizon_hours}h horizon")
+            print(f"    Loaded metadata for {self.horizon_hours}h horizon")
 
         # Load selected features
         features_path = os.path.join(model_dir, "selected_features.json")
@@ -890,17 +890,34 @@ class AQIForecastingSystem:
                             model.load_model(model_file)
                             self.loaded_models[model_name] = model
                     elif model_name == 'XGBoost':
-                        model_file = os.path.join(model_path, f"{model_name}_{self.horizon_hours}h.json")
-                        if os.path.exists(model_file):
+                        joblib_file = os.path.join(model_path, f"{model_name}_{self.horizon_hours}h.joblib")
+                        json_file = os.path.join(model_path, f"{model_name}_{self.horizon_hours}h.json")
+
+                        if os.path.exists(joblib_file):
+                            model = joblib.load(joblib_file)
+                        elif os.path.exists(json_file):
                             model = XGBRegressor()
-                            model.load_model(model_file)
-                            self.loaded_models[model_name] = model
-                    elif model_name == 'LightGBM':
-                        model_file = os.path.join(model_path, f"{model_name}_{self.horizon_hours}h.txt")
-                        if os.path.exists(model_file):
-                            import lightgbm as lgb
-                            model = lgb.Booster(model_file=model_file)
-                            self.loaded_models[model_name] = model
+                            model.load_model(json_file)
+                        else:
+                            raise FileNotFoundError(f"XGBoost model not found at {joblib_file} or {json_file}")
+
+                        self.loaded_models[model_name] = model
+
+            elif model_name == 'LightGBM':
+                joblib_file = os.path.join(model_path, f"{model_name}_{self.horizon_hours}h.joblib")
+                txt_file = os.path.join(model_path, f"{model_name}_{self.horizon_hours}h.txt")
+
+                import lightgbm as lgb
+
+                if os.path.exists(joblib_file):
+                    model = joblib.load(joblib_file)
+                elif os.path.exists(txt_file):
+                    model = lgb.Booster(model_file=txt_file)
+                else:
+                    raise FileNotFoundError(f"LightGBM model not found at {joblib_file} or {txt_file}")
+
+                self.loaded_models[model_name] = model
+
                     else:
                         model_file = os.path.join(model_path, f"{model_name}_{self.horizon_hours}h.pkl")
                         if os.path.exists(model_file):
@@ -908,10 +925,10 @@ class AQIForecastingSystem:
                             self.loaded_models[model_name] = model
 
                     if model_name in self.loaded_models:
-                        print(f"   ✅ Loaded {model_name}")
+                        print(f"    Loaded {model_name}")
 
                 except Exception as e:
-                    print(f"   ❌ Error loading {model_name}: {str(e)}")
+                    print(f"    Error loading {model_name}: {str(e)}")
 
         # Load ensemble configuration
         ensemble_config_path = os.path.join(model_dir, "ensemble_models", "ensemble_config.json")
@@ -919,18 +936,18 @@ class AQIForecastingSystem:
             with open(ensemble_config_path, 'r') as f:
                 ensemble_data = json.load(f)
             self.ensemble_configs = ensemble_data['ensemble_configs']
-            print(f"   ✅ Loaded ensemble configurations")
+            print(f"   Loaded ensemble configurations")
 
-        print("✅ Model loading completed")
+        print("Model loading completed")
 
     def predict_with_ensemble(self, X):
         """Make predictions using individual models and ensembles"""
         if not hasattr(self, 'loaded_models'):
-            print("❌ No models loaded. Please load models first using load_models()")
+            print("No models loaded. Please load models first using load_models()")
             return None
 
         if not self.selected_features:
-            print("❌ No selected features loaded. Please load models first using load_models()")
+            print("No selected features loaded. Please load models first using load_models()")
             return None
 
         predictions = {}
@@ -1111,12 +1128,12 @@ class AQIForecastingSystem:
 
     def generate_report(self):
         """Generate comprehensive performance report"""
-        print("📊 Generating performance report...")
+        print(" Generating performance report...")
 
         evaluation_results = self.evaluate_generalization()
 
         print("\n" + "="*80)
-        print(f"🏆 AQI FORECASTING SYSTEM PERFORMANCE REPORT - {self.horizon_hours}H HORIZON")
+        print(f"AQI FORECASTING SYSTEM PERFORMANCE REPORT - {self.horizon_hours}H HORIZON")
         print("="*80)
 
         print(f"\n📋 Configuration:")
@@ -1129,12 +1146,12 @@ class AQIForecastingSystem:
         print(f"   • Dataset shape: {self.df.shape}")
 
         print(f"\n🎯 Quality Checks:")
-        print(f"   ✅ Standard deviation > 3 (prevents flat predictions)")
-        print(f"   ✅ Expanding window validation (no future leakage)")
-        print(f"   ✅ Cross-validated feature selection")
+        print(f"  Standard deviation > 3 (prevents flat predictions)")
+        print(f"  Expanding window validation (no future leakage)")
+        print(f"  Cross-validated feature selection")
 
         # Individual model performance summary
-        print(f"\n📈 Individual Model Performance:")
+        print(f"\nIndividual Model Performance:")
         print("-" * 80)
 
         for model_name in self.model_configs.keys():
@@ -1143,7 +1160,7 @@ class AQIForecastingSystem:
 
             results = evaluation_results[model_name]
 
-            print(f"\n🌲 {model_name}:")
+            print(f"\n {model_name}:")
             print(f"   🔹 Train Metrics:")
             print(f"      • MSE  = {results.get('avg_train_mse', 0):.3f}")
             print(f"      • RMSE = {results.get('avg_train_rmse', 0):.3f}")
@@ -1194,17 +1211,17 @@ class AQIForecastingSystem:
                 best_model = model_name
 
         if best_model:
-            model_type = "🏆 Ensemble" if best_model in self.ensemble_configs else "🌲 Individual"
+            model_type = " Ensemble" if best_model in self.ensemble_configs else " Individual"
             print(f"   {model_type} - {best_model} (R²={best_r2:.3f})")
 
         # Feature summary
         if self.selected_features:
-            print(f"\n🔍 Selected Features ({len(self.selected_features)}):")
+            print(f"\n Selected Features ({len(self.selected_features)}):")
             print("-" * 80)
             print(f"   {', '.join(self.selected_features[:10])}{'...' if len(self.selected_features) > 10 else ''}")
 
         print("\n" + "="*80)
-        print(f"✅ SYSTEM VALIDATION COMPLETE - {self.horizon_hours}H HORIZON")
+        print(f" SYSTEM VALIDATION COMPLETE - {self.horizon_hours}H HORIZON")
         print("="*80)
 
         return evaluation_results
@@ -1215,16 +1232,16 @@ class AQIForecastingSystem:
         from sklearn.ensemble import RandomForestRegressor
         from sklearn.metrics import r2_score, mean_squared_error
 
-        print(f"🎯 Training baseline models for {self.horizon_hours}h horizon...")
+        print(f" Training baseline models for {self.horizon_hours}h horizon...")
 
         if not self.selected_features:
-            print("❌ No features selected! Run feature selection first.")
+            print(" No features selected! Run feature selection first.")
             return {}
 
         # Filter features that actually exist in dataframe
         available_features = [f for f in self.selected_features if f in self.df.columns]
         if not available_features:
-            print("❌ No valid feature columns found")
+            print(" No valid feature columns found")
             return {}
 
         print(f"   Using {len(available_features)} features")
@@ -1234,7 +1251,7 @@ class AQIForecastingSystem:
         clean_data = self.df[all_cols].dropna()
 
         if len(clean_data) < 100:
-            print(f"❌ Insufficient clean data! Only {len(clean_data)} rows available")
+            print(f" Insufficient clean data! Only {len(clean_data)} rows available")
             return {}
 
         print(f"   Clean data shape: {clean_data.shape}")
@@ -1313,24 +1330,24 @@ class AQIForecastingSystem:
 
     def run_pipeline(self, max_features=15, train_size=5*7*24, test_size=3*24, step_size=3*24):
         """Execute the complete forecasting pipeline"""
-        print(f"🚀 Starting AQI Forecasting Pipeline for {self.horizon_hours}h horizon...")
+        print(f" Starting AQI Forecasting Pipeline for {self.horizon_hours}h horizon...")
 
         # Step 1: Validate data quality
         quality_issues = self.validate_data_quality()
         if quality_issues:
-            print("❌ Halting pipeline due to data quality issues.")
+            print(" Halting pipeline due to data quality issues.")
             return None
 
         # Step 2: Feature selection
         feature_selection_details = self.feature_selection_pipeline(max_features=max_features)
         if not self.selected_features:
-            print("❌ Halting pipeline due to lack of selected features.")
+            print(" Halting pipeline due to lack of selected features.")
             return None
 
         # Step 3: Check for data leakage
         leakage_results = self.check_data_leakage()
         if leakage_results.get('high_correlation_features') or leakage_results.get('suspicious_name_features'):
-            print("❌ Halting pipeline due to potential data leakage.")
+            print(" Halting pipeline due to potential data leakage.")
             return None
 
         # Step 4: Initialize models
@@ -1348,8 +1365,8 @@ class AQIForecastingSystem:
         # Step 8: Generate report
         evaluation_results = self.generate_report()
 
-        print(f"\n💾 All models saved to: {save_path}")
-        print(f"📊 Pipeline completed successfully!")
+        print(f"\n All models saved to: {save_path}")
+        print(f" Pipeline completed successfully!")
 
         return {
             'evaluation_results': evaluation_results,
