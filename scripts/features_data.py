@@ -2,6 +2,8 @@ import os
 import json
 import pandas as pd
 import hopsworks
+import sys
+from datetime import datetime
 
 def ensure_directories():
     """Create necessary directories"""
@@ -15,11 +17,15 @@ def ensure_directories():
 
 def get_hopsworks_project():
     """Login to Hopsworks and return the project"""
-    project = hopsworks.login(
-        api_key_value=os.environ["HOPSWORKS_API_KEY"],
-        project=os.environ["HOPSWORKS_PROJECT"]
-    )
-    return project
+    try:
+        project = hopsworks.login(
+            api_key_value=os.environ["HOPSWORKS_API_KEY"],
+            project=os.environ["HOPSWORKS_PROJECT"]
+        )
+        return project
+    except Exception as e:
+        print(f" Failed to login to Hopsworks: {e}")
+        sys.exit(1)
 
 def load_selected_features(horizon):
     """Load selected features for a given horizon from config file"""
@@ -47,7 +53,7 @@ def extract_horizon_data(horizon, project):
         selected_features = load_selected_features(horizon)
         if not selected_features:
             print(f" No selected features found for {horizon}h. Skipping.")
-            return None
+            return False
         
         print(f"Loading {len(selected_features)} selected features...")
         
@@ -55,10 +61,9 @@ def extract_horizon_data(horizon, project):
         fg_name = f"aqi_features_{horizon}h_prod"
         fg = fs.get_feature_group(name=fg_name, version=1)
         
-        # Read all data from the feature group
+        print(f"Reading data from feature group: {fg_name}")
         all_data_df = fg.read()
         
-        # Filter columns - only keep features that exist in both selected_features and dataframe
         available_features = [feature for feature in selected_features if feature in all_data_df.columns]
         
         if len(available_features) != len(selected_features):
@@ -67,7 +72,7 @@ def extract_horizon_data(horizon, project):
         
         if not available_features:
             print(f" No valid features found for {horizon}h horizon")
-            return None
+            return False
         
         print(f"Found {len(available_features)} valid features")
         
@@ -83,54 +88,46 @@ def extract_horizon_data(horizon, project):
         
         print(f" Saved latest 72 rows for {horizon}h to {csv_filename}")
         print(f"Data shape: {latest_72_rows.shape}")
+        print(f"Features: {list(latest_72_rows.columns)}")
         
-        return latest_72_rows
+        return True
         
     except Exception as e:
         print(f" Failed to process {horizon}h horizon: {e}")
-        return None
+        return False
 
-def extract_all_horizons_data():
-    """Extract data for all horizons (24h, 48h, 72h)"""
+def main():
+    """Main function to extract data for all horizons"""
+    print(f" Starting feature data extraction at {datetime.now()}")
+    
     # Ensure directories exist
     ensure_directories()
     
     # Get Hopsworks project
+    print(" Connecting to Hopsworks...")
     project = get_hopsworks_project()
-    
-    # Dictionary to store the extracted dataframes
-    horizon_data = {}
     
     # Process each horizon
     horizons = [24, 48, 72]
+    success_count = 0
     
     for horizon in horizons:
-        data = extract_horizon_data(horizon, project)
-        if data is not None:
-            horizon_data[horizon] = data
+        if extract_horizon_data(horizon, project):
+            success_count += 1
     
-    # Display summary of extracted data
-    print("\n--- Summary of Extracted Data ---")
-    for horizon, df in horizon_data.items():
-        print(f"{horizon}h horizon: {df.shape[0]} rows × {df.shape[1]} features")
-        print(f"Features: {list(df.columns)}")
-        print()
+    # Summary
+    print(f"\n--- Extraction Summary ---")
+    print(f"Successful extractions: {success_count}/{len(horizons)}")
     
-    return horizon_data
+    if success_count == 0:
+        print(" No data was successfully extracted")
+        sys.exit(1)
+    elif success_count < len(horizons):
+        print(" Some extractions failed, but continuing...")
+        sys.exit(0)
+    else:
+        print(" All data extracted successfully")
+        sys.exit(0)
 
-def extract_single_horizon_data(horizon):
-    """Extract data for a single horizon"""
-    # Ensure directories exist
-    ensure_directories()
-    
-    # Get Hopsworks project
-    project = get_hopsworks_project()
-    
-    # Extract data for the specified horizon
-    return extract_horizon_data(horizon, project)
-
-# Example usage:
 if __name__ == "__main__":
-    # Extract data for all horizons
-    all_data = extract_all_horizons_data()
-    
+    main()
