@@ -29,7 +29,7 @@ def get_hopsworks_project():
 
 def load_selected_features(horizon):
     """Load selected features for a given horizon from config file"""
-    config_path = f'backend/config/selected_features{horizon}h.json'
+    config_path = f'backend/config/selected_features_{horizon}h.json'
     try:
         with open(config_path, 'r') as f:
             selected_features = json.load(f)
