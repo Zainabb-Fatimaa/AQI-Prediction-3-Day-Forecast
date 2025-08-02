@@ -5,7 +5,7 @@
     "model_format": "pkl",
     "version": 9,
     "features_count": 17,
-    "updated_at": "2025-08-01T19:21:38.132892",
+    "updated_at": "2025-08-02T12:05:57.883786",
     "description": "The best model for 24h is ExtraTrees"
   },
   "48": {
@@ -14,7 +14,7 @@
     "model_format": "pkl",
     "version": 8,
     "features_count": 17,
-    "updated_at": "2025-08-01T19:21:46.885425",
+    "updated_at": "2025-08-02T12:06:06.447021",
     "description": "The best model for 48h is ExtraTrees"
   },
   "72": {
@@ -23,7 +23,7 @@
     "model_format": "pkl",
     "version": 8,
     "features_count": 11,
-    "updated_at": "2025-08-01T19:21:55.237439",
+    "updated_at": "2025-08-02T12:06:14.705891",
     "description": "The best model for 72h is ExtraTrees"
   }
 }
