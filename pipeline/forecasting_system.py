@@ -89,7 +89,7 @@ class AQIForecastingSystem:
             issues.append(f"{self.target_column} has suspiciously high values (max: {target_data.max():.1f})")
 
         # Check feature columns
-        feature_cols = [col for col in self.df.columns if col not in [self.target_column, 'event_time', 'date', 'unique_id']]
+        feature_cols = [col for col in self.df.columns if col not in [self.target_column, 'event_time', 'date', 'unique_id', 'aqi']]
         print(f"   Available features: {len(feature_cols)}")
 
         if len(feature_cols) == 0:
