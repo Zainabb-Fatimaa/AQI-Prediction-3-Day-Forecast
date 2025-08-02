@@ -1,36 +1,35 @@
 name: Biweekly Feature Data Extraction
-
 on:
   schedule:
-    # Run every 2 weeks on Monday at 8:00 AM UTC
     - cron: '0 8 * * 1'
-  workflow_dispatch: # Allow manual trigger
+  workflow_dispatch:
 
 jobs:
   extract-data:
     runs-on: ubuntu-latest
-
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-
+      with:
+        token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}  # Add this line!
+        
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.9'
-
+        
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-
+        
     - name: Run feature extraction script
       env:
         HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
         HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
       run: |
         python scripts/features_data.py
-
+        
     - name: Check extracted CSV files
       run: |
         echo "Checking extracted CSV files:"
@@ -44,21 +43,16 @@ jobs:
             echo "Missing file: $file"
           fi
         done
-
+        
     - name: Commit and push only horizon data CSVs
-      env:
-        PERSONAL_GITHUB_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
       run: |
-        git config --global user.email "action@github.com"
-        git config --global user.name "GitHub Action"
-
+        git config --local user.email "action@github.com"  # Also change to --local like the working file
+        git config --local user.name "GitHub Action"
         git add backend/data/horizon_24h_data.csv || true
         git add backend/data/horizon_48h_data.csv || true
         git add backend/data/horizon_72h_data.csv || true
-
-        if git diff --cached --quiet; then
+        if git diff --staged --quiet; then  # Change --cached to --staged like the working file
           echo "No changes to commit"
         else
-          git commit -m "Update horizon feature data - $(date '+%Y-%m-%d %H:%M:%S')"
+          git commit -m "Update horizon feature data - $(date -u)"  # Use -u flag like the working file
           git push https://${{ secrets.PERSONAL_GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
-        fi
