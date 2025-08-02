@@ -245,7 +245,7 @@ class AQIForecastingSystem:
         print(f" Starting feature selection for {self.horizon_hours}h horizon...")
 
         # Get all potential feature columns (exclude target and metadata)
-        exclude_cols = [self.target_column, "date", "event_time", "unique_id"]
+        exclude_cols = [self.target_column, "date", "event_time", "unique_id", "aqi"]
         all_features = [col for col in self.df.columns if col not in exclude_cols]
 
         if not all_features:
