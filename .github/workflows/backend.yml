@@ -20,12 +20,14 @@ jobs:
   update-data:
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' && github.event.schedule == '0 * * * *' || github.event_name == 'workflow_dispatch'
-
+    outputs:
+      features-changed: ${{ steps.check-features.outputs.features-changed }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+          fetch-depth: 2  # Need previous commit to compare
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -36,9 +38,35 @@ jobs:
         run: |
           pip install hopsworks pandas numpy joblib
 
-      - name: Update AQI Data (create file if missing)
+      - name: Create directories
         run: |
           mkdir -p backend/data
+          mkdir -p backend/config
+          mkdir -p backend/models
+
+      - name: Check for feature changes
+        id: check-features
+        run: |
+          echo "Checking for feature configuration changes..."
+          if git diff HEAD~1 HEAD --name-only | grep -E "backend/config/selected_features.*\.json$" || [ ! -f backend/data/horizon_24h_data.csv ]; then
+            echo "Feature changes detected or data files missing"
+            echo "features-changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "No feature changes detected"
+            echo "features-changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract features data
+        if: steps.check-features.outputs.features-changed == 'true'
+        run: |
+          echo "Extracting features data due to changes..."
+          python scripts/extract_features_data.py
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+
+      - name: Update AQI Data (legacy support)
+        run: |
           if [ ! -f backend/data/aqi_data.csv ]; then
             echo "aqi_data.csv not found, creating..."
             python scripts/update_data.py
@@ -50,22 +78,26 @@ jobs:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
           HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
 
-      - name: Commit and push AQI data
+      - name: Commit and push data changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add backend/data/aqi_data.csv
+          git add backend/data/
           if git diff --staged --quiet; then
-            echo "No changes to commit"
+            echo "No data changes to commit"
           else
-            git commit -m "Update AQI data - $(date -u)"
+            if [ "${{ steps.check-features.outputs.features-changed }}" = "true" ]; then
+              git commit -m "Update features data due to configuration changes - $(date -u)"
+            else
+              git commit -m "Update AQI data - $(date -u)"
+            fi
             git push https://${{ secrets.PERSONAL_GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
           fi
 
   update-models:
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' && github.event.schedule == '0 2 1,15 * *' || github.event_name == 'workflow_dispatch'
-
+    needs: update-data
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -88,6 +120,14 @@ jobs:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
           HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
 
+      - name: Extract latest features data for models
+        run: |
+          echo "Extracting latest features data for model training..."
+          python scripts/extract_features_data.py
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+
       - name: Update AQI Data (with models)
         run: |
           python scripts/update_data.py
@@ -99,10 +139,49 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add backend/data/aqi_data.csv backend/models/ backend/config/
+          git add backend/data/ backend/models/ backend/config/
           if git diff --staged --quiet; then
             echo "No model or data changes to commit"
           else
             git commit -m "Update models and data - $(date -u)"
+            git push https://${{ secrets.PERSONAL_GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
+          fi
+
+  # Job to handle feature changes triggered by config updates
+  handle-feature-changes:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && contains(github.event.head_commit.modified, 'backend/config/selected_features')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install hopsworks pandas numpy joblib
+
+      - name: Extract features data after config change
+        run: |
+          echo "Feature configuration changed, extracting new data..."
+          python scripts/extract_features_data.py
+        env:
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+
+      - name: Commit updated data
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add backend/data/
+          if git diff --staged --quiet; then
+            echo "No data changes after feature extraction"
+          else
+            git commit -m "Update data after feature configuration change - $(date -u)"
             git push https://${{ secrets.PERSONAL_GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
           fi
