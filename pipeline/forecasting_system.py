@@ -807,7 +807,7 @@ class AQIForecastingSystem:
                     if model_name == 'CatBoost':
                         model.save_model(os.path.join(model_dir, f"{model_name}_{self.horizon_hours}h.cbm"))
                     elif model_name == 'XGBoost':
-                       joblib.dump(model, os.path.join(model_dir, f"{model_name}_{self.horizon_hours}h.joblib"))
+                        joblib.dump(model, os.path.join(model_dir, f"{model_name}_{self.horizon_hours}h.joblib"))
                     elif model_name == 'LightGBM':
                         joblib.dump(model, os.path.join(model_dir, f"{model_name}_{self.horizon_hours}h.joblib"))
                     else:
@@ -903,20 +903,20 @@ class AQIForecastingSystem:
 
                         self.loaded_models[model_name] = model
 
-            elif model_name == 'LightGBM':
-                joblib_file = os.path.join(model_path, f"{model_name}_{self.horizon_hours}h.joblib")
-                txt_file = os.path.join(model_path, f"{model_name}_{self.horizon_hours}h.txt")
+                    elif model_name == 'LightGBM':
+                        joblib_file = os.path.join(model_path, f"{model_name}_{self.horizon_hours}h.joblib")
+                        txt_file = os.path.join(model_path, f"{model_name}_{self.horizon_hours}h.txt")
 
-                import lightgbm as lgb
+                        import lightgbm as lgb
 
-                if os.path.exists(joblib_file):
-                    model = joblib.load(joblib_file)
-                elif os.path.exists(txt_file):
-                    model = lgb.Booster(model_file=txt_file)
-                else:
-                    raise FileNotFoundError(f"LightGBM model not found at {joblib_file} or {txt_file}")
+                        if os.path.exists(joblib_file):
+                            model = joblib.load(joblib_file)
+                        elif os.path.exists(txt_file):
+                            model = lgb.Booster(model_file=txt_file)
+                        else:
+                            raise FileNotFoundError(f"LightGBM model not found at {joblib_file} or {txt_file}")
 
-                self.loaded_models[model_name] = model
+                        self.loaded_models[model_name] = model
 
                     else:
                         model_file = os.path.join(model_path, f"{model_name}_{self.horizon_hours}h.pkl")
