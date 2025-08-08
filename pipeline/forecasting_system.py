@@ -44,7 +44,6 @@ class AQIForecastingSystem:
         print(f" Model save path: {self.model_save_path}")
 
     def validate_data_quality(self):
-        """Validate data quality for the specific horizon"""
         print(f" Validating data quality for {self.horizon_hours}h horizon...")
 
         issues = []
@@ -104,7 +103,7 @@ class AQIForecastingSystem:
 
         for col in data_cleaned.select_dtypes(include=[np.number]).columns:
             if col == self.target_column:
-                continue  # Don't modify target column
+                continue 
 
             original_values = data_cleaned[col].dropna()
 
@@ -146,7 +145,6 @@ class AQIForecastingSystem:
         return data_cleaned
 
     def mutual_info_feature_selection(self, X, y, k=15):
-        """Select features using mutual information"""
         selector = SelectKBest(score_func=mutual_info_regression, k=min(k, X.shape[1]))
         X_selected = selector.fit_transform(X, y)
         selected_features = X.columns[selector.get_support()].tolist()
@@ -155,7 +153,6 @@ class AQIForecastingSystem:
         return selected_features, scores
 
     def rf_importance_feature_selection(self, X, y, k=15):
-        """Select features using Random Forest importance"""
         rf = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
         rf.fit(X, y)
 
@@ -217,7 +214,6 @@ class AQIForecastingSystem:
         }
 
     def feature_selection_pipeline(self, max_features=15):
-        """Complete feature selection pipeline for the specific horizon"""
         print(f" Starting feature selection for {self.horizon_hours}h horizon...")
 
         exclude_cols = [self.target_column, "date", "event_time", "unique_id"]
@@ -261,7 +257,6 @@ class AQIForecastingSystem:
             self.selected_features = []
             return {}
 
-        # Step 3: Handle outliers
         feature_data = self.df[variance_filtered_features + [self.target_column]].copy()
         feature_data_clean = self.handle_outliers(feature_data[variance_filtered_features])
         feature_data[variance_filtered_features] = feature_data_clean
@@ -299,7 +294,6 @@ class AQIForecastingSystem:
             self.selected_features = []
             return {}
 
-        # Step 5: Cross-validated feature selection
         X_features = feature_data[correlation_filtered_features]
         y_target = feature_data[self.target_column]
 
@@ -341,7 +335,6 @@ class AQIForecastingSystem:
             return {}
 
     def check_data_leakage(self):
-        """Check for data leakage in selected features"""
         print(" Checking for data leakage...")
 
         if not self.selected_features:
@@ -382,7 +375,6 @@ class AQIForecastingSystem:
         return leakage_results
 
     def initialize_models(self):
-        """Initialize all tree-based models"""
         print(" Initializing tree-based models...")
 
         self.model_configs = {
@@ -459,7 +451,6 @@ class AQIForecastingSystem:
         }
 
     def create_ensemble_predictions(self, fold_predictions):
-        """Create ensemble predictions by averaging specified models"""
         ensemble_preds = {}
 
         for ensemble_name, model_list in self.ensemble_configs.items():
@@ -720,7 +711,6 @@ class AQIForecastingSystem:
         print(" Final model training completed")
 
     def save_models(self, save_metadata=True):
-        """Save all trained models and metadata"""
         print("Saving models and metadata...")
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1317,7 +1307,6 @@ class AQIForecastingSystem:
         
         predictions = {}
         
-        # Individual model predictions
         for model_name, model in self.deployment_models.items():
             if model is None:
                 continue
@@ -1331,7 +1320,6 @@ class AQIForecastingSystem:
                 print(f"   Error with {model_name}: {str(e)}")
                 continue
         
-        # Ensemble predictions
         if hasattr(self, 'ensemble_configs'):
             for ensemble_name, component_models in self.ensemble_configs.items():
                 available_preds = []
