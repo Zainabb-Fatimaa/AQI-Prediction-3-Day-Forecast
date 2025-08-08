@@ -12,7 +12,6 @@ def get_hopsworks_project():
     return project
 
 def create_feature_groups(fs):
-    """Creates the feature groups in Hopsworks if they don't already exist."""
     for horizon in [24, 48, 72]:
         fg_name = f"aqi_features_{horizon}h_prod"
         try:
@@ -30,18 +29,10 @@ def create_feature_groups(fs):
             )
 
 def run_feature_pipeline():
-    """
-    Main function to run the feature pipeline.
-    Connects to Hopsworks, preprocesses data for each horizon,
-    and inserts it into the corresponding feature group.
-    """
     project = get_hopsworks_project()
     fs = project.get_feature_store()
-    
-    # Create feature groups if they don't exist
     create_feature_groups(fs)
     
-    # Read raw data
     fg_old = fs.get_feature_group(name="karachi_raw_data_store", version=1)
     raw_df = fg_old.read()
     
@@ -61,13 +52,10 @@ def run_feature_pipeline():
                 features_df["event_time"] = pd.to_datetime(features_df.index)
                 features_df['unique_id'] = range(len(features_df))
                 
-                # Get feature group
                 fg = fs.get_feature_group(name=f"aqi_features_{horizon}h_prod", version=1)
                 
-                # Align DataFrame to schema - FIXED: Remove parentheses from fg.schema()
                 schema_cols = [feature.name for feature in fg.schema]
                 
-                # Keep only columns that exist in both DataFrame and schema
                 matching_cols = [col for col in features_df.columns if col in schema_cols]
                 dropped_cols = [col for col in features_df.columns if col not in schema_cols]
                 
@@ -77,7 +65,6 @@ def run_feature_pipeline():
                 features_df = features_df[matching_cols]
                 print(f"Final DataFrame shape after schema alignment: {features_df.shape}")
                 
-                # Insert into feature group
                 fg.insert(features_df, write_options={"wait_for_job": True})
                 print(f"Inserted {len(features_df)} rows into '{fg.name}'")
                 
