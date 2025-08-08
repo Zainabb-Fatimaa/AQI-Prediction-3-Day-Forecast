@@ -724,7 +724,7 @@ class AQIForecastingSystem:
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        save_dir = os.path.join(self.model_save_path, f"aqi_models_{self.horizon_hours}h")
+        save_dir = os.path.join(self.model_save_path, f"aqi_models_{self.horizon_hours}h_{timestamp}")
         os.makedirs(save_dir, exist_ok=True)
 
         models_dir = os.path.join(save_dir, "individual_models")
@@ -1275,10 +1275,7 @@ class AQIForecastingSystem:
             evaluation_results = self.generate_report()
             pipeline_results['evaluation_results'] = evaluation_results
             
-            if save_models:
-                print("\n Saving Models")
-                save_path = self.save_models()
-                pipeline_results['models_saved_to'] = save_path
+            save_path = self.save_models()
             
             pipeline_results['status'] = 'completed'
             pipeline_results['success'] = True
