@@ -720,6 +720,7 @@ class AQIForecastingSystem:
         print(" Final model training completed")
 
     def save_models(self, save_metadata=True):
+        """Save all trained models and metadata"""
         print("Saving models and metadata...")
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -773,12 +774,10 @@ class AQIForecastingSystem:
                 'ensemble_configs': self.ensemble_configs,
                 'dataset_shape': self.df.shape,
                 'training_timestamp': timestamp,
-                'validation_method': 'sliding_window'
             }
 
             with open(os.path.join(save_dir, "metadata.json"), 'w') as f:
                 json.dump(metadata, f, indent=2)
-
         with open(os.path.join(save_dir, "selected_features.json"), 'w') as f:
             json.dump(self.selected_features, f, indent=2)
 
@@ -1273,22 +1272,25 @@ class AQIForecastingSystem:
 
             print("\nPerformance Evaluation")
             evaluation_results = self.generate_report()
-            pipeline_results['evaluation_results'] = evaluation_results
             
             save_path = self.save_models()
-            
-            pipeline_results['status'] = 'completed'
-            pipeline_results['success'] = True
-            
-            print(f"\n Pipeline completed successfully for {self.horizon_hours}h horizon!")
-            
+        
         except Exception as e:
             print(f"\n Pipeline failed: {str(e)}")
             pipeline_results['status'] = 'failed'
             pipeline_results['success'] = False
             pipeline_results['error'] = str(e)
         
-        return pipeline_results
+        return {
+            'evaluation_results': evaluation_results,
+            'feature_selection_details': feature_selection_details,
+            'leakage_results': leakage_results,
+            'model_save_path': save_path,
+            'selected_features': self.selected_features,
+            'individual_predictions': self.predictions,
+            'ensemble_predictions': self.ensemble_predictions,
+            'full_data': self.df
+        }
 
     def predict_new_data(self, new_data):
         if not hasattr(self, 'deployment_models') or not self.deployment_models:
