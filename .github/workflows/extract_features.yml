@@ -1,4 +1,4 @@
-name: Biweekly Feature Data Extraction
+name: Daily Feature Data Extraction
 on:
   schedule:
     - cron: '0 4 * * *'
