@@ -101,9 +101,9 @@ def run_initial_training_for_horizon(horizon):
 
     combined_metrics = {
         **best_model_metrics,
-        "train_size": config['train_size'],
-        "test_size": config['test_size'],
-        "step_size": config['step_size']
+        "train_size": 8*7*24,
+        "test_size": 4*7*24,
+        "step_size": 2*24
     }
 
     cleaned_metrics = filter_numeric_metrics(combined_metrics)
