@@ -1,8 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Script: data_collect_aqi.py - Clean Production Version
-Description: Production-ready script to collect AQI and weather data, process, and upload to Hopsworks feature store.
-"""
 import os
 import pandas as pd
 import numpy as np
@@ -15,7 +10,6 @@ from hsfs.feature_group import FeatureGroup
 from hsfs.client.exceptions import FeatureStoreException
 from datetime import datetime, timedelta
 
-# --- Utility Functions ---
 def get_hopsworks_api_key():
     api_key = os.getenv("HOPSWORKS_API_KEY")
     if not api_key:
@@ -28,13 +22,11 @@ def get_hopsworks_project():
         raise EnvironmentError("HOPSWORKS_PROJECT environment variable not set.")
     return project
 
-# --- Hopsworks Login ---
 api_key = get_hopsworks_api_key()
 project = hopsworks.login(api_key_value=api_key)
 fs = project.get_feature_store()
 dataset_api = project.get_dataset_api()
 
-# --- Fetch existing feature group data ---
 feature_group_name = "karachi_raw_data_store"
 feature_group_version = 1
 try:
@@ -43,19 +35,16 @@ try:
 except Exception:
     existing_df = pd.DataFrame()
 
-# --- Open-Meteo API Setup ---
 cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
 retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
 openmeteo = openmeteo_requests.Client(session=retry_session)
 
-# --- Date Setup ---
 DAYS_BACK = 92
 END_DATE = (datetime.utcnow() - timedelta(days=1)).date()
 START_DATE = END_DATE - timedelta(days=DAYS_BACK - 1)
 START_DATE_STR = START_DATE.strftime('%Y-%m-%d')
 END_DATE_STR = END_DATE.strftime('%Y-%m-%d')
 
-# --- Air Quality API ---
 aqi_url = "https://air-quality-api.open-meteo.com/v1/air-quality"
 aqi_params = {
     "latitude": 24.8608,
@@ -69,7 +58,6 @@ aqi_params = {
 aqi_responses = openmeteo.weather_api(aqi_url, params=aqi_params)
 aqi_response = aqi_responses[0]
 
-# --- Air Quality DataFrame ---
 hourly = aqi_response.Hourly()
 hourly_data = {"date": pd.date_range(
     start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
@@ -86,7 +74,6 @@ hourly_data["sulphur_dioxide"] = hourly.Variables(5).ValuesAsNumpy()
 hourly_data["ozone"] = hourly.Variables(6).ValuesAsNumpy()
 air_quality_df = pd.DataFrame(data=hourly_data)
 
-# --- Conversion Factors ---
 conversion_factors = {
     'carbon_monoxide': {'factor_ppb': 28.01 / 24.45},
     'nitrogen_dioxide': {'factor_ppb': 46.01 / 24.45},
@@ -95,7 +82,6 @@ conversion_factors = {
     'carbon_dioxide': {'factor_ppb': 44.01 / 24.45}
 }
 
-# --- Rolling Averages and Unit Conversion ---
 air_quality_df['PM2.5 (μg/m³) 24h'] = air_quality_df['pm2_5'].rolling(window=24, min_periods=1).mean()
 air_quality_df['PM10 (μg/m³) 24h'] = air_quality_df['pm10'].rolling(window=24, min_periods=1).mean()
 if 'carbon_monoxide' in air_quality_df.columns:
@@ -114,7 +100,6 @@ if 'ozone' in air_quality_df.columns:
 if 'carbon_dioxide' in air_quality_df.columns:
     air_quality_df['Carbon Dioxide (ppb) Hourly'] = air_quality_df['carbon_dioxide'] / conversion_factors['carbon_dioxide']['factor_ppb']
 
-# --- AQI Calculation Function ---
 def calculate_epa_aqi(pollutant, concentration, unit):
     aqi_breakpoints = {
         'PM2.5': [(0.0, 12.0, 0, 50), (12.1, 35.4, 51, 100), (35.5, 55.4, 101, 150), (55.5, 150.4, 151, 200), (150.5, 250.4, 201, 300), (250.5, 350.4, 301, 400), (350.5, 500.4, 401, 500)],
@@ -153,7 +138,6 @@ def calculate_epa_aqi(pollutant, concentration, unit):
                 break
         return aqi
 
-# --- Calculate AQI Columns ---
 air_quality_df['Calculated AQI PM2.5'] = calculate_epa_aqi('PM2.5', air_quality_df['PM2.5 (μg/m³) 24h'], 'ug/m3')
 air_quality_df['Calculated AQI PM10'] = calculate_epa_aqi('PM10', air_quality_df['PM10 (μg/m³) 24h'], 'ug/m3')
 air_quality_df['Calculated AQI CO'] = calculate_epa_aqi('CO', air_quality_df['CO (ppm) 8h'], 'ppm')
@@ -165,7 +149,6 @@ pollutant_aqi_columns = ['Calculated AQI PM2.5', 'Calculated AQI PM10', 'Calcula
 air_quality_df[pollutant_aqi_columns] = air_quality_df[pollutant_aqi_columns].astype(float)
 air_quality_df['Calculated Overall AQI'] = air_quality_df[pollutant_aqi_columns].max(axis=1)
 
-# --- Weather Archive API ---
 weather_url = "https://archive-api.open-meteo.com/v1/archive"
 weather_params = {
     "latitude": 24.8608,
@@ -195,17 +178,14 @@ hourly_df = pd.DataFrame(data=hourly_data)
 hourly_df['wind_speed_10m'] = hourly_df['wind_speed_10m'] * 3.6
 hourly_df['wind_speed_100m'] = hourly_df['wind_speed_100m'] * 3.6
 
-# --- Create time-based features ---
 hourly_df['hour'] = hourly_df['date'].dt.hour
 hourly_df['day'] = hourly_df['date'].dt.day
 hourly_df['weekday'] = hourly_df['date'].dt.weekday
 hourly_df['temperature_change_1h'] = hourly_df['temperature_2m'].diff()
 hourly_df['relative_humidity_2m_24h'] = hourly_df['relative_humidity_2m'].rolling(window=24, min_periods=1).mean()
 
-# --- Merge DataFrames ---
 merged_df = pd.merge(hourly_df, air_quality_df, on='date', how='inner')
 
-# --- Column renaming ---
 merged_df = merged_df.rename(columns={
     'temperature_2m': 'temperature',
     'relative_humidity_2m': 'humidity',
@@ -220,7 +200,6 @@ merged_df = merged_df.rename(columns={
     'Calculated Overall AQI': 'aqi'
 }, errors='ignore')
 
-# --- Select required columns ---
 required_columns = [
     'date', 'temperature', 'humidity', 'wind_speed', 'wind_direction',
     'pm2_5', 'pm10', 'co', 'so2', 'o3', 'no2', 'aqi', 
@@ -230,13 +209,11 @@ required_columns = [
 available_columns = [col for col in required_columns if col in merged_df.columns]
 merged_df = merged_df[available_columns]
 
-# --- Add date_str for online primary key ---
 if pd.api.types.is_datetime64_any_dtype(merged_df['date']):
     merged_df['date_str'] = merged_df['date'].dt.strftime("%Y-%m-%d %H:%M:%S")
 else:
     merged_df['date_str'] = pd.to_datetime(merged_df['date']).dt.strftime("%Y-%m-%d %H:%M:%S")
 
-# --- Handle existing data merge ---
 try:
     if not existing_df.empty:
         existing_df = existing_df.reset_index(drop=True)
@@ -256,14 +233,11 @@ try:
 except Exception as e:
     final_df = merged_df.copy()
 
-# --- Remove duplicate columns ---
 final_df = final_df.loc[:, ~final_df.columns.duplicated()]
 
-# --- Save to CSV and upload to Hopsworks Resources ---
 final_df.to_csv("karachi_merged_data_aqi.csv", index=False)
 dataset_api.upload("karachi_merged_data_aqi.csv", "Resources", overwrite=True)
 
-# --- Data type processing ---
 expected_numeric_cols = ['temperature', 'humidity', 'wind_speed', 'wind_direction', 
                         'pm2_5', 'pm10', 'co', 'so2', 'o3', 'no2', 'aqi',
                         'hour', 'day', 'weekday']
@@ -280,7 +254,6 @@ for col in numeric_cols:
     except Exception:
         pass
 
-# --- Convert date columns ---
 if 'date' in final_df.columns:
     try:
         final_df['date'] = pd.to_datetime(final_df['date']).dt.date
@@ -290,7 +263,6 @@ if 'date' in final_df.columns:
 if 'date_str' in final_df.columns:
     final_df['date_str'] = final_df['date_str'].astype(str)
 
-# --- Define schema ---
 feature_group_schema = []
 for col in final_df.columns:
     if col == 'date':
@@ -302,7 +274,6 @@ for col in final_df.columns:
     else:
         feature_group_schema.append(Feature(name=col, type="string"))
 
-# --- Create or update feature group ---
 try:
     fg = fs.get_feature_group(name=feature_group_name, version=feature_group_version)
 except FeatureStoreException:
@@ -318,7 +289,6 @@ except FeatureStoreException:
 except Exception:
     fg = None
 
-# --- Insert data ---
 if fg is not None:
     try:
         insert_df = final_df.copy()
