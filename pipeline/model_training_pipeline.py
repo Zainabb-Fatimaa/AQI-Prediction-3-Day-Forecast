@@ -14,21 +14,17 @@ def get_hopsworks_project():
     return project
 
 def filter_numeric_metrics(metrics_dict):
-    """Returns a dictionary with only numeric (int/float) values."""
     return {k: v for k, v in metrics_dict.items() if isinstance(v, (int, float))}
 
 def run_initial_training_for_horizon(horizon):
-    """
-    Runs preprocessing, training, and model registration for a given AQI forecast horizon.
-    """
     project = get_hopsworks_project()
     fs = project.get_feature_store()
     mr = project.get_model_registry()
 
     horizon_configs = {
-        24: {'max_features': 17, 'train_size': 6*7*24, 'test_size': 3*7*24, 'step_size': 5*24},
-        48: {'max_features': 17, 'train_size': 6*7*24, 'test_size': 3*7*24, 'step_size': 5*24},
-        72: {'max_features': 11, 'train_size': 6*7*24, 'test_size': 3*7*24, 'step_size': 5*24}
+        24: {'max_features': 10},
+        48: {'max_features': 15},
+        72: {'max_features': 8}
     }
 
     if horizon not in horizon_configs:
@@ -39,7 +35,6 @@ def run_initial_training_for_horizon(horizon):
     print(f"\n--- Starting Initial Training for {horizon}h Horizon ---")
     print(f"   Configuration: {config}")
 
-    # 1. Get Raw Data from Feature Store
     try:
         fg = fs.get_feature_group(name=f"aqi_features_{horizon}h_prod", version=1)
         raw_df = fg.read()
@@ -48,7 +43,6 @@ def run_initial_training_for_horizon(horizon):
         print(f"Could not read data from feature group: {e}")
         return
 
-    # 2. Preprocess Data
     preprocessor = AQIDataPreprocessor(dataframe=raw_df)
     success = preprocessor.run_full_preprocessing(
         correlation_threshold=0.85,
@@ -70,7 +64,6 @@ def run_initial_training_for_horizon(horizon):
     final_df = processed_data['full_data']
     print(f"Processed data shape for {horizon}h: {final_df.shape}")
 
-    # 3. Run Modeling Pipeline
     forecasting_system = AQIForecastingSystem(
         horizon_df=final_df,
         target_column=f'aqi_{horizon}h',
@@ -78,18 +71,13 @@ def run_initial_training_for_horizon(horizon):
         model_save_path=f"./aqi_models_{horizon}h"
     )
 
-    results = forecasting_system.run_pipeline(
-        max_features=config['max_features'],
-        train_size=config['train_size'],
-        test_size=config['test_size'],
-        step_size=config['step_size']
-    )
+    results = forecasting_system.run_complete_pipeline(
+        max_features=config['max_features'] )
 
     if not results:
         print(f"Modeling failed for {horizon}h. Skipping registration.")
         return
 
-    # 4. Select Best Model
     eval_results = results['evaluation_results']
     best_model_name = None
     best_model_metrics = None
@@ -108,7 +96,6 @@ def run_initial_training_for_horizon(horizon):
 
     print(f"Best model for {horizon}h: {best_model_name} with R² = {best_r2:.3f}")
 
-    # 5. Clean and Add Metrics
     def filter_numeric_metrics(metrics_dict):
         return {k: v for k, v in metrics_dict.items() if isinstance(v, (int, float))}
 
@@ -122,7 +109,6 @@ def run_initial_training_for_horizon(horizon):
     cleaned_metrics = filter_numeric_metrics(combined_metrics)
     model_description = f"The best model for {horizon}h is {best_model_name}"
 
-    # 6. Register the Model
     model = mr.python.create_model(
         name=f"aqi_forecast_model_{horizon}h",
         description=model_description,
