@@ -309,6 +309,7 @@ class AQIDataPreprocessor:
         self.processed_df['day'] = self.processed_df.index.day
         self.processed_df['weekday'] = self.processed_df.index.dayofweek
         self.processed_df['month'] = self.processed_df.index.month
+        self.processed_df['quarter'] = self.processed_df.index.quarter
         self.processed_df['is_weekend'] = (self.processed_df.index.dayofweek >= 5).astype(int)
 
         self.processed_df['season'] = self.processed_df['month'] % 12 // 3 + 1
@@ -318,6 +319,7 @@ class AQIDataPreprocessor:
 
         self.processed_df['day_sin'] = np.sin(2 * np.pi * self.processed_df['day_of_week'] / 7)
         self.processed_df['day_cos'] = np.cos(2 * np.pi * self.processed_df['day_of_week'] / 7)
+        self.processed_df['month_cos'] = np.cos(2 * np.pi * self.processed_df['month'] / 12)
 
         print(f"Created time features")
 
@@ -350,11 +352,15 @@ class AQIDataPreprocessor:
         else:
              print(f"Warning: Target column '{self.target_column}' not found. Skipping target lag features.")
 
-        # Create lag features for pollutants
         for pollutant in self.pollutant_columns:
             if pollutant in self.processed_df.columns:
                 for lag in lag_periods:
                     self.processed_df[f'{pollutant}_lag_{lag}h'] = self.processed_df[pollutant].shift(lag)
+                    
+        for weather_var in self.weather_columns:
+            if weather_var in self.processed_df.columns:
+                for lag in lag_periods:
+                    self.processed_df[f'{weather_var}_lag_{lag}h'] = self.processed_df[weather_var].shift(lag)
 
         print(f"Created lag features with periods: {lag_periods}")
 
