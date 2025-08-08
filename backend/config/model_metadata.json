@@ -5,7 +5,7 @@
     "model_format": "pkl",
     "version": 12,
     "features_count": 17,
-    "updated_at": "2025-08-02T13:19:08.081489",
+    "updated_at": "2025-08-08T15:28:19.107011",
     "description": "The best model for 24h is ExtraTrees"
   },
   "48": {
@@ -14,7 +14,7 @@
     "model_format": "cbm",
     "version": 11,
     "features_count": 17,
-    "updated_at": "2025-08-02T13:19:16.896516",
+    "updated_at": "2025-08-08T15:28:25.543376",
     "description": "The best model for 48h is CatBoost"
   },
   "72": {
@@ -23,7 +23,7 @@
     "model_format": "pkl",
     "version": 11,
     "features_count": 11,
-    "updated_at": "2025-08-02T13:19:25.715832",
+    "updated_at": "2025-08-08T15:28:31.730803",
     "description": "The best model for 72h is ExtraTrees"
   }
 }
