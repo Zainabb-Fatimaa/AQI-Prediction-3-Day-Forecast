@@ -1,9 +1,9 @@
 name: AQI Model Training Pipeline
 
 on:
-  workflow_dispatch: # Allows manual triggering
+  workflow_dispatch: 
   schedule:
-    - cron: '0 0 1,15 * *' # Runs at midnight UTC on the 1st and 15th of every month
+    - cron: '0 5 * * *' 
 
 jobs:
   run-training-pipeline:
