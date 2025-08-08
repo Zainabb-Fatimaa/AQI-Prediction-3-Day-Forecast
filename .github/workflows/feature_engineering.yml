@@ -2,8 +2,8 @@ name: Feature Preprocessing
 
 on:
   schedule:
-    - cron: '0 3 * * *'  # Run every Monday at 3 AM UTC
-  workflow_dispatch:      # Allow manual trigger from GitHub
+    - cron: '0 3 * * *' 
+  workflow_dispatch:     
 
 jobs:
   run-feature-pipeline:
@@ -15,7 +15,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9' # Choose a Python version compatible with your libraries
+          python-version: '3.9' 
 
       - name: Install dependencies
         run: |
