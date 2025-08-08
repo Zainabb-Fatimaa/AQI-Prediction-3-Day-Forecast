@@ -1224,73 +1224,66 @@ class AQIForecastingSystem:
         return results
 
     def run_complete_pipeline(self, max_features=15, train_baseline=True, save_models=True):
+    
+      print(f"\n Starting complete AQI forecasting pipeline for {self.horizon_hours}h horizon")
+      print("="*80)
+    
+      pipeline_results = {
+        'horizon_hours': self.horizon_hours,
+        'target_column': self.target_column,
+        'dataset_shape': self.df.shape,
+        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+      }
+    
+      print("\nData Quality Validation")
+      quality_issues = self.validate_data_quality()
+      pipeline_results['data_quality_issues'] = quality_issues
         
-        print(f"\n Starting complete AQI forecasting pipeline for {self.horizon_hours}h horizon")
-        print("="*80)
+      if quality_issues:
+        print(" Data quality issues found - proceeding with caution")
         
-        pipeline_results = {
-            'horizon_hours': self.horizon_hours,
-            'target_column': self.target_column,
-            'dataset_shape': self.df.shape,
-            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
+      print("\n Feature Selection Pipeline")
+      feature_selection_results = self.feature_selection_pipeline(max_features=max_features)
+      pipeline_results['feature_selection'] = feature_selection_results
         
-        try:
-            print("\nData Quality Validation")
-            quality_issues = self.validate_data_quality()
-            pipeline_results['data_quality_issues'] = quality_issues
-            
-            if quality_issues:
-                print(" Data quality issues found - proceeding with caution")
-            
-            print("\n Feature Selection Pipeline")
-            feature_selection_results = self.feature_selection_pipeline(max_features=max_features)
-            pipeline_results['feature_selection'] = feature_selection_results
-            
-            if not self.selected_features:
-                print("Feature selection failed - cannot proceed")
-                return pipeline_results
-            
-            print("\n Data Leakage Detection")
-            leakage_results = self.check_data_leakage()
-            pipeline_results['leakage_check'] = leakage_results
-            
-            print("\nModel Initialization")
-            self.initialize_models()
-            pipeline_results['models_initialized'] = list(self.model_configs.keys())
-            
-            if train_baseline:
-                print("\nBaseline Model Training")
-                baseline_results = self.train_baseline()
-                pipeline_results['baseline_results'] = baseline_results
-            
-            print("\n Sliding Window Cross-Validation")
-            self.sliding_window_validation()
-            
-            print("\nFinal Model Training")
-            self.train_final_models()
+      if not self.selected_features:
+         print("Feature selection failed - cannot proceed")
+         return pipeline_results
+        
+      print("\n Data Leakage Detection")
+      leakage_results = self.check_data_leakage()
+      pipeline_results['leakage_check'] = leakage_results
+        
+      print("\nModel Initialization")
+      self.initialize_models()
+      pipeline_results['models_initialized'] = list(self.model_configs.keys())
+                
+      if train_baseline:
+        print("\nBaseline Model Training")
+        baseline_results = self.train_baseline()
+        pipeline_results['baseline_results'] = baseline_results
+        
+      print("\n Sliding Window Cross-Validation")
+      self.sliding_window_validation()
+        
+      print("\nFinal Model Training")
+      self.train_final_models()
 
-            print("\nPerformance Evaluation")
-            evaluation_results = self.generate_report()
-            
-            save_path = self.save_models()
+      print("\nPerformance Evaluation")
+      evaluation_results = self.generate_report()
         
-        except Exception as e:
-            print(f"\n Pipeline failed: {str(e)}")
-            pipeline_results['status'] = 'failed'
-            pipeline_results['success'] = False
-            pipeline_results['error'] = str(e)
-        
-        return {
-            'evaluation_results': evaluation_results,
-            'feature_selection_details': feature_selection_details,
-            'leakage_results': leakage_results,
-            'model_save_path': save_path,
-            'selected_features': self.selected_features,
-            'individual_predictions': self.predictions,
-            'ensemble_predictions': self.ensemble_predictions,
-            'full_data': self.df
-        }
+      save_path = self.save_models()
+    
+      return {
+        'evaluation_results': evaluation_results,
+        'feature_selection_details': feature_selection_results,  
+        'leakage_results': leakage_results,
+        'model_save_path': save_path,
+        'selected_features': self.selected_features,
+        'individual_predictions': self.predictions,
+        'ensemble_predictions': self.ensemble_predictions,
+        'full_data': self.df
+      }
 
     def predict_new_data(self, new_data):
         if not hasattr(self, 'deployment_models') or not self.deployment_models:
