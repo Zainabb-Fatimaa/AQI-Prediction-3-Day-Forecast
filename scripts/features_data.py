@@ -6,7 +6,6 @@ import sys
 from datetime import datetime
 
 def ensure_directories():
-    """Create necessary directories"""
     directories = [
         'backend/models',
         'backend/data',
@@ -16,7 +15,6 @@ def ensure_directories():
         os.makedirs(directory, exist_ok=True)
 
 def get_hopsworks_project():
-    """Login to Hopsworks and return the project"""
     try:
         project = hopsworks.login(
             api_key_value=os.environ["HOPSWORKS_API_KEY"],
@@ -28,7 +26,6 @@ def get_hopsworks_project():
         sys.exit(1)
 
 def load_selected_features(horizon):
-    """Load selected features for a given horizon from config file"""
     config_path = f'backend/config/selected_features_{horizon}h.json'
     try:
         with open(config_path, 'r') as f:
@@ -42,14 +39,11 @@ def load_selected_features(horizon):
         return None
 
 def extract_horizon_data(horizon, project):
-    """Extract filtered data for a specific horizon and save to CSV"""
     print(f"--- Processing {horizon}h horizon ---")
     
     try:
-        # Get feature store
         fs = project.get_feature_store()
         
-        # Load selected features from config
         selected_features = load_selected_features(horizon)
         if not selected_features:
             print(f" No selected features found for {horizon}h. Skipping.")
@@ -57,7 +51,6 @@ def extract_horizon_data(horizon, project):
         
         print(f"Loading {len(selected_features)} selected features...")
         
-        # Get the feature group for the current horizon
         fg_name = f"aqi_features_{horizon}h_prod"
         fg = fs.get_feature_group(name=fg_name, version=1)
         
@@ -76,13 +69,8 @@ def extract_horizon_data(horizon, project):
         
         print(f"Found {len(available_features)} valid features")
         
-        # Create filtered dataframe with only selected features
         filtered_df = all_data_df[available_features].copy()
-        
-        # Get the latest 72 rows
         latest_72_rows = filtered_df.tail(72)
-        
-        # Save to CSV file
         csv_filename = f'backend/data/horizon_{horizon}h_data.csv'
         latest_72_rows.to_csv(csv_filename, index=False)
         
@@ -97,17 +85,13 @@ def extract_horizon_data(horizon, project):
         return False
 
 def main():
-    """Main function to extract data for all horizons"""
     print(f" Starting feature data extraction at {datetime.now()}")
     
-    # Ensure directories exist
     ensure_directories()
     
-    # Get Hopsworks project
     print(" Connecting to Hopsworks...")
     project = get_hopsworks_project()
     
-    # Process each horizon
     horizons = [24, 48, 72]
     success_count = 0
     
@@ -115,7 +99,6 @@ def main():
         if extract_horizon_data(horizon, project):
             success_count += 1
     
-    # Summary
     print(f"\n--- Extraction Summary ---")
     print(f"Successful extractions: {success_count}/{len(horizons)}")
     
