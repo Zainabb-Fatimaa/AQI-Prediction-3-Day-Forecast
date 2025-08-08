@@ -18,39 +18,24 @@ import warnings
 warnings.filterwarnings('ignore')
 
 class AQIForecastingSystem:
-    """
-    Horizon-Specific AQI Forecasting System
-    Works with single horizon dataframes and explicit target columns
-    """
 
     def __init__(self, horizon_df, target_column, horizon_hours, model_save_path="./aqi_models"):
-        """
-        Initialize system for a specific forecast horizon
-
-        Parameters:
-        - horizon_df: DataFrame with features for specific horizon (e.g., final_features_df_24h)
-        - target_column: Name of target column (e.g., 'aqi_24h')
-        - horizon_hours: Forecast horizon in hours (e.g., 24, 48, 72)
-        - model_save_path: Directory to save models
-        """
         self.df = horizon_df.copy()
         self.target_column = target_column
         self.horizon_hours = horizon_hours
         self.model_save_path = model_save_path
 
-        # Ensure data is sorted by time for temporal splitting
         if 'event_time' in self.df.columns:
             self.df['event_time'] = pd.to_datetime(self.df['event_time'])
             self.df = self.df.sort_values('event_time').reset_index(drop=True)
 
         self.models = {}
         self.ensemble_models = {}
-        self.selected_features = []  # Store selected features for this horizon
+        self.selected_features = []  
         self.results = {}
         self.predictions = {}
         self.ensemble_predictions = {}
 
-        # Create model save directory
         os.makedirs(self.model_save_path, exist_ok=True)
 
         print(f" Initialized for {horizon_hours}h horizon")
@@ -64,7 +49,6 @@ class AQIForecastingSystem:
 
         issues = []
 
-        # Check target column exists and has reasonable values
         if self.target_column not in self.df.columns:
             issues.append(f"Target column '{self.target_column}' not found in dataframe")
             return issues
@@ -85,17 +69,15 @@ class AQIForecastingSystem:
         if (target_data < 0).any():
             issues.append(f"{self.target_column} has {(target_data < 0).sum()} negative values")
 
-        if target_data.max() > 500:  # AQI typically maxes around 500
+        if target_data.max() > 500:  
             issues.append(f"{self.target_column} has suspiciously high values (max: {target_data.max():.1f})")
 
-        # Check feature columns
         feature_cols = [col for col in self.df.columns if col not in [self.target_column, 'event_time', 'date', 'unique_id', 'aqi']]
         print(f"   Available features: {len(feature_cols)}")
 
         if len(feature_cols) == 0:
             issues.append("No feature columns found")
 
-        # Check for high missing values
         high_missing_features = []
         for col in feature_cols:
             missing_pct = self.df[col].isna().sum() / len(self.df)
@@ -115,7 +97,6 @@ class AQIForecastingSystem:
         return issues
 
     def handle_outliers(self, data, method='iqr', cap_percentile=0.01):
-        """Handle outliers in features before selection"""
         print(" Handling outliers in features...")
 
         data_cleaned = data.copy()
@@ -188,7 +169,6 @@ class AQIForecastingSystem:
         return selected_features, selected_scores
 
     def cross_validated_feature_selection(self, X, y, n_splits=3, max_features=15):
-        """Perform hybrid cross-validated feature selection (MI + RF scores)"""
         print(f"    Hybrid feature selection for {self.horizon_hours}h horizon...")
 
         tscv = TimeSeriesSplit(n_splits=n_splits)
@@ -200,7 +180,6 @@ class AQIForecastingSystem:
             X_train = X.iloc[train_idx].fillna(X.median())
             y_train = y.iloc[train_idx]
 
-            # Mutual Information
             try:
                 mi_features, mi_scores = self.mutual_info_feature_selection(X_train, y_train, k=max_features)
                 for feat, score in zip(mi_features, mi_scores):
@@ -209,7 +188,6 @@ class AQIForecastingSystem:
             except Exception as e:
                 print(f"      MI selection failed in fold {fold}: {e}")
 
-            # Random Forest
             try:
                 rf_features, rf_scores = self.rf_importance_feature_selection(X_train, y_train, k=max_features)
                 for feat, score in zip(rf_features, rf_scores):
@@ -218,7 +196,6 @@ class AQIForecastingSystem:
             except Exception as e:
                 print(f"      RF selection failed in fold {fold}: {e}")
 
-        # Normalize and combine scores
         all_features = set(mi_score_total.keys()) | set(rf_score_total.keys())
         hybrid_scores = {}
         for feat in all_features:
@@ -228,7 +205,6 @@ class AQIForecastingSystem:
             rf_norm = rf / n_splits
             hybrid_scores[feat] = (mi_norm + rf_norm) / 2
 
-        # Sort by hybrid score
         sorted_features = sorted(hybrid_scores.items(), key=lambda x: x[1], reverse=True)
         final_features = [f for f, _ in sorted_features[:max_features]]
 
@@ -244,7 +220,6 @@ class AQIForecastingSystem:
         """Complete feature selection pipeline for the specific horizon"""
         print(f" Starting feature selection for {self.horizon_hours}h horizon...")
 
-        # Get all potential feature columns (exclude target and metadata)
         exclude_cols = [self.target_column, "date", "event_time", "unique_id"]
         all_features = [col for col in self.df.columns if col not in exclude_cols]
 
@@ -255,11 +230,10 @@ class AQIForecastingSystem:
 
         print(f"   Initial features: {len(all_features)}")
 
-        # Step 1: Remove features with high missing values
         filtered_features = []
         for feature in all_features:
             missing_pct = self.df[feature].isna().sum() / len(self.df)
-            if missing_pct < 0.5:  # Keep features with <50% missing
+            if missing_pct < 0.5:  
                 filtered_features.append(feature)
 
         print(f"   After missing value filter: {len(filtered_features)} features")
@@ -269,7 +243,6 @@ class AQIForecastingSystem:
             self.selected_features = []
             return {}
 
-        # Step 2: Remove low variance features
         low_var_threshold = 1e-6
         variance_filtered_features = []
 
@@ -293,7 +266,6 @@ class AQIForecastingSystem:
         feature_data_clean = self.handle_outliers(feature_data[variance_filtered_features])
         feature_data[variance_filtered_features] = feature_data_clean
 
-        # Step 4: Remove highly correlated features
         numeric_features = feature_data[variance_filtered_features].select_dtypes(include=[np.number]).columns.tolist()
 
         if len(numeric_features) > 1:
@@ -306,7 +278,7 @@ class AQIForecastingSystem:
 
             high_corr_features = []
             for col in upper_triangle.columns:
-                high_corr_cols = upper_triangle[col][upper_triangle[col] > 0.9].index.tolist()
+                high_corr_cols = upper_triangle[col][upper_triangle[col] > 0.85].index.tolist()
                 if high_corr_cols:
                     target_corrs = feature_data[numeric_features + [self.target_column]].corr()[self.target_column].abs()
                     for corr_col in high_corr_cols:
@@ -331,7 +303,6 @@ class AQIForecastingSystem:
         X_features = feature_data[correlation_filtered_features]
         y_target = feature_data[self.target_column]
 
-        # Remove rows with missing target values
         valid_rows = ~y_target.isna()
         X_features = X_features[valid_rows]
         y_target = y_target[valid_rows]
@@ -377,16 +348,14 @@ class AQIForecastingSystem:
             print("   No features selected to check")
             return {}
 
-        # Check correlation with target
         target_data = self.df[self.selected_features + [self.target_column]].dropna()
         if len(target_data) == 0:
             print(f"     No clean data for correlation analysis")
             return {}
 
         correlations = target_data[self.selected_features].corrwith(target_data[self.target_column]).abs()
-        high_corr_features = correlations[correlations > 0.95].index.tolist()
+        high_corr_features = correlations[correlations > 0.85].index.tolist()
 
-        # Check for suspicious feature names
         suspicious_features = []
         for feature in self.selected_features:
             feature_lower = feature.lower()
@@ -485,7 +454,6 @@ class AQIForecastingSystem:
             )
         }
 
-        # Initialize ensemble configurations
         self.ensemble_configs = {
             'Ensemble_CBX_ET': ['CatBoost', 'XGBoost', 'ExtraTrees']
         }
@@ -507,7 +475,6 @@ class AQIForecastingSystem:
         return ensemble_preds
 
     def calculate_metrics(self, y_true, y_pred):
-        """Calculate comprehensive metrics with error handling"""
         try:
             if len(y_true) == 0 or len(y_pred) == 0:
                 return {
@@ -533,7 +500,6 @@ class AQIForecastingSystem:
             mae = mean_absolute_error(y_true_clean, y_pred_clean)
             r2 = r2_score(y_true_clean, y_pred_clean)
 
-            # Calculate MAPE with protection against division by zero
             mape_mask = y_true_clean != 0
             if mape_mask.any():
                 mape = np.mean(np.abs((y_true_clean[mape_mask] - y_pred_clean[mape_mask]) / y_true_clean[mape_mask])) * 100
@@ -553,16 +519,14 @@ class AQIForecastingSystem:
                 'mse': np.inf, 'mape': np.inf, 'std': 0, 'mean': 0
             }
 
-    def expanding_window_validation(self, train_size=5*7*24, test_size=3*24, step_size=3*24):
-        """Perform expanding window validation"""
-        print(f" Starting expanding window validation for {self.horizon_hours}h horizon...")
+    def sliding_window_validation(self, train_size=8*7*24, test_size=4*7*24, step_size=2*24):
+        print(f" Starting sliding window validation for {self.horizon_hours}h horizon...")
         print(f" Parameters: train_size={train_size}, test_size={test_size}, step_size={step_size}")
 
         if not self.selected_features:
             print(" No features selected! Run feature selection first.")
             return
 
-        # Check if selected features exist in dataframe
         valid_features = [f for f in self.selected_features if f in self.df.columns]
         if not valid_features:
             print(" No valid selected features found in dataframe")
@@ -571,70 +535,60 @@ class AQIForecastingSystem:
         total_samples = len(self.df)
         print(f" Total samples: {total_samples}, Using {len(valid_features)} features")
 
-        # Generate expanding windows
         windows = []
-        current_start = 0
-        train_end = train_size
+        train_start = 0
 
-        while train_end + test_size <= total_samples:
+        while train_start + train_size + test_size <= total_samples:
+            train_end = train_start + train_size
             test_start = train_end
             test_end = min(test_start + test_size, total_samples)
 
             windows.append({
-                'train_start': current_start,
+                'train_start': train_start,
                 'train_end': train_end,
                 'test_start': test_start,
                 'test_end': test_end
             })
 
-            train_end += step_size
+            train_start += step_size
 
         if not windows:
-            print(" Not enough data for expanding window validation!")
+            print(" Not enough data for sliding window validation!")
+            print(f" Required: {train_size + test_size} samples, Available: {total_samples}")
             return
 
-        print(f" Created {len(windows)} expanding windows")
+        print(f" Created {len(windows)} sliding windows")
 
-        # Initialize results storage
         self.results = {model_name: [] for model_name in self.model_configs.keys()}
         self.predictions = {model_name: [] for model_name in self.model_configs.keys()}
 
-        # Initialize ensemble storage
         ensemble_names = list(self.ensemble_configs.keys())
         self.ensemble_results = {ensemble_name: [] for ensemble_name in ensemble_names}
         self.ensemble_predictions = {ensemble_name: [] for ensemble_name in ensemble_names}
 
-        # Storage for final models
         self.final_models = {model_name: None for model_name in self.model_configs.keys()}
 
-        # Process each window
         for fold, window in enumerate(windows):
             train_start, train_end, test_start, test_end = window['train_start'], window['train_end'], window['test_start'], window['test_end']
 
             print(f"Window {fold + 1}/{len(windows)}: Train[{train_start}:{train_end}] ({train_end-train_start} samples), Test[{test_start}:{test_end}] ({test_end-test_start} samples)")
 
             try:
-                # Prepare data
                 df_clean = self.df[valid_features + [self.target_column]].copy()
                 df_clean = df_clean.fillna(method='ffill').fillna(method='bfill')
 
-                # Split data using expanding window
                 X_train = df_clean.iloc[train_start:train_end][valid_features]
                 X_test = df_clean.iloc[test_start:test_end][valid_features]
                 y_train = df_clean.iloc[train_start:train_end][self.target_column]
                 y_test = df_clean.iloc[test_start:test_end][self.target_column]
 
-                # Store fold predictions for ensemble
                 fold_predictions = {}
 
-                # Train each model
                 for model_name, model_config in self.model_configs.items():
                     try:
-                        # Clone model for this fold
                         if model_name in ['CatBoost', 'XGBoost', 'LightGBM']:
                             model = model_config.__class__(**model_config.get_params())
 
-                            # Use validation set for early stopping
                             if len(X_train) > 100:
                                 val_size = max(int(0.15 * len(X_train)), 50)
                                 X_val, y_val = X_train.iloc[-val_size:], y_train.iloc[-val_size:]
@@ -644,7 +598,7 @@ class AQIForecastingSystem:
                                     model.fit(X_train_sub, y_train_sub, eval_set=(X_val, y_val))
                                 elif model_name == 'XGBoost':
                                     model.fit(X_train_sub, y_train_sub, eval_set=[(X_val, y_val)])
-                                else:  # LightGBM
+                                else:  
                                     model.fit(X_train_sub, y_train_sub, eval_set=[(X_val, y_val)])
                             else:
                                 model.fit(X_train, y_train)
@@ -652,18 +606,14 @@ class AQIForecastingSystem:
                             model = model_config.__class__(**model_config.get_params())
                             model.fit(X_train, y_train)
 
-                        # Make predictions
                         train_pred = model.predict(X_train)
                         test_pred = model.predict(X_test)
 
-                        # Store for ensemble
                         fold_predictions[model_name] = test_pred
 
-                        # Calculate metrics
                         train_metrics = self.calculate_metrics(y_train, train_pred)
                         test_metrics = self.calculate_metrics(y_test, test_pred)
 
-                        # Store results
                         fold_result = {
                             'fold': fold,
                             'window': window,
@@ -680,7 +630,6 @@ class AQIForecastingSystem:
                         self.results[model_name].append(fold_result)
                         self.predictions[model_name].extend(test_pred)
 
-                        # Store final model (from last fold)
                         if fold == len(windows) - 1:
                             self.final_models[model_name] = model
 
@@ -688,16 +637,12 @@ class AQIForecastingSystem:
                         print(f"    Error training {model_name} in fold {fold}: {str(e)}")
                         continue
 
-                # Create ensemble predictions
                 ensemble_preds = self.create_ensemble_predictions(fold_predictions)
 
-                # Store ensemble results
                 for ensemble_name, ensemble_pred in ensemble_preds.items():
                     try:
-                        # Calculate ensemble metrics
                         ensemble_metrics = self.calculate_metrics(y_test, ensemble_pred)
 
-                        # Store ensemble results
                         ensemble_fold_result = {
                             'fold': fold,
                             'window': window,
@@ -720,27 +665,23 @@ class AQIForecastingSystem:
                 print(f"    Error processing fold {fold}: {str(e)}")
                 continue
 
-        print(f" Completed {len(windows)} windows of expanding validation")
+        print(f" Completed {len(windows)} windows of sliding validation")
 
     def train_final_models(self):
-        """Train final models on the entire dataset"""
         print(f" Training final models for {self.horizon_hours}h horizon...")
 
         if not self.selected_features:
             print(" No features selected! Run feature selection first.")
             return
 
-        # Check if selected features exist in dataframe
         valid_features = [f for f in self.selected_features if f in self.df.columns]
         if not valid_features:
             print(" No valid selected features found in dataframe")
             return
 
-        # Initialize deployment models storage
         self.deployment_models = {model_name: None for model_name in self.model_configs.keys()}
 
         try:
-            # Create clean dataset
             df_clean = self.df[valid_features + [self.target_column]].copy()
             df_clean = df_clean.fillna(method='ffill').fillna(method='bfill')
 
@@ -749,12 +690,9 @@ class AQIForecastingSystem:
 
             for model_name, model_config in self.model_configs.items():
                 try:
-                    # Clone model
                     model = model_config.__class__(**model_config.get_params())
 
-                    # Train on full dataset
                     if model_name in ['CatBoost', 'XGBoost', 'LightGBM']:
-                        # Use last 20% as validation for early stopping
                         val_size = max(int(0.2 * len(X_full)), 100)
                         X_val, y_val = X_full.iloc[-val_size:], y_full.iloc[-val_size:]
                         X_train_sub, y_train_sub = X_full.iloc[:-val_size], y_full.iloc[:-val_size]
@@ -763,12 +701,11 @@ class AQIForecastingSystem:
                             model.fit(X_train_sub, y_train_sub, eval_set=(X_val, y_val))
                         elif model_name == 'XGBoost':
                             model.fit(X_train_sub, y_train_sub, eval_set=[(X_val, y_val)])
-                        else:  # LightGBM
+                        else:  
                             model.fit(X_train_sub, y_train_sub, eval_set=[(X_val, y_val)])
                     else:
                         model.fit(X_full, y_full)
 
-                    # Store final model
                     self.deployment_models[model_name] = model
 
                     print(f"    {model_name} trained ({len(valid_features)} features)")
@@ -783,16 +720,13 @@ class AQIForecastingSystem:
         print(" Final model training completed")
 
     def save_models(self, save_metadata=True):
-        """Save all trained models and metadata"""
         print("Saving models and metadata...")
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # Create timestamped directory
         save_dir = os.path.join(self.model_save_path, f"aqi_models_{self.horizon_hours}h_{timestamp}")
         os.makedirs(save_dir, exist_ok=True)
 
-        # Save individual models
         models_dir = os.path.join(save_dir, "individual_models")
         os.makedirs(models_dir, exist_ok=True)
 
@@ -803,7 +737,6 @@ class AQIForecastingSystem:
                 os.makedirs(model_dir, exist_ok=True)
 
                 try:
-                    # Use appropriate saving method for each model type
                     if model_name == 'CatBoost':
                         model.save_model(os.path.join(model_dir, f"{model_name}_{self.horizon_hours}h.cbm"))
                     elif model_name == 'XGBoost':
@@ -818,7 +751,6 @@ class AQIForecastingSystem:
                 except Exception as e:
                     print(f"    Error saving {model_name}: {str(e)}")
 
-        # Save ensemble configurations
         ensemble_dir = os.path.join(save_dir, "ensemble_models")
         os.makedirs(ensemble_dir, exist_ok=True)
 
@@ -832,7 +764,6 @@ class AQIForecastingSystem:
         with open(os.path.join(ensemble_dir, "ensemble_config.json"), 'w') as f:
             json.dump(ensemble_metadata, f, indent=2)
 
-        # Save metadata
         if save_metadata:
             metadata = {
                 'selected_features': self.selected_features,
@@ -842,12 +773,12 @@ class AQIForecastingSystem:
                 'ensemble_configs': self.ensemble_configs,
                 'dataset_shape': self.df.shape,
                 'training_timestamp': timestamp,
+                'validation_method': 'sliding_window'
             }
 
             with open(os.path.join(save_dir, "metadata.json"), 'w') as f:
                 json.dump(metadata, f, indent=2)
 
-        # Save selected features separately for easy loading
         with open(os.path.join(save_dir, "selected_features.json"), 'w') as f:
             json.dump(self.selected_features, f, indent=2)
 
@@ -855,10 +786,8 @@ class AQIForecastingSystem:
         return save_dir
 
     def load_models(self, model_dir):
-        """Load saved models for prediction"""
         print(f" Loading models from: {model_dir}")
 
-        # Load metadata
         metadata_path = os.path.join(model_dir, "metadata.json")
         if os.path.exists(metadata_path):
             with open(metadata_path, 'r') as f:
@@ -868,13 +797,11 @@ class AQIForecastingSystem:
             self.horizon_hours = metadata.get('horizon_hours', 0)
             print(f"    Loaded metadata for {self.horizon_hours}h horizon")
 
-        # Load selected features
         features_path = os.path.join(model_dir, "selected_features.json")
         if os.path.exists(features_path):
             with open(features_path, 'r') as f:
                 self.selected_features = json.load(f)
 
-        # Load individual models
         models_dir = os.path.join(model_dir, "individual_models")
         self.loaded_models = {}
 
@@ -930,7 +857,6 @@ class AQIForecastingSystem:
                 except Exception as e:
                     print(f"    Error loading {model_name}: {str(e)}")
 
-        # Load ensemble configuration
         ensemble_config_path = os.path.join(model_dir, "ensemble_models", "ensemble_config.json")
         if os.path.exists(ensemble_config_path):
             with open(ensemble_config_path, 'r') as f:
@@ -952,12 +878,9 @@ class AQIForecastingSystem:
 
         predictions = {}
 
-        # Individual model predictions
         for model_name, model in self.loaded_models.items():
             try:
-                # Ensure X has the correct features
                 if isinstance(X, pd.DataFrame):
-                    # Check if all required features are available
                     available_features = [f for f in self.selected_features if f in X.columns]
                     if len(available_features) != len(self.selected_features):
                         missing_features = set(self.selected_features) - set(available_features)
@@ -969,10 +892,8 @@ class AQIForecastingSystem:
                     X_model = X
 
                 if model_name == 'LightGBM' and hasattr(model, 'predict'):
-                    # LightGBM Booster object
                     pred = model.predict(X_model)
                 else:
-                    # Standard sklearn/XGBoost/CatBoost interface
                     pred = model.predict(X_model)
 
                 predictions[model_name] = pred
@@ -981,7 +902,6 @@ class AQIForecastingSystem:
                 print(f"Error predicting with {model_name}: {str(e)}")
                 continue
 
-        # Ensemble predictions
         ensemble_predictions = {}
         for ensemble_name, model_list in self.ensemble_configs.items():
             model_preds = []
@@ -991,32 +911,26 @@ class AQIForecastingSystem:
                     model_preds.append(predictions[model_name])
 
             if len(model_preds) > 0:
-                # Simple average ensemble
                 ensemble_pred = np.mean(model_preds, axis=0)
                 ensemble_predictions[ensemble_name] = ensemble_pred
 
-        # Combine individual and ensemble predictions
         all_predictions = {**predictions, **ensemble_predictions}
 
         return all_predictions
 
     def evaluate_generalization(self):
-        """Evaluate generalization and check for flat predictions"""
-        print(f"📈 Evaluating generalization for {self.horizon_hours}h horizon...")
+        print(f"Evaluating generalization for {self.horizon_hours}h horizon...")
 
         evaluation_results = {}
 
-        # Evaluate individual models
         for model_name in self.model_configs.keys():
             if not self.predictions.get(model_name):
                 continue
 
             preds = np.array(self.predictions[model_name])
 
-            # Calculate variability metrics
             std_pred = np.std(preds)
 
-            # Aggregate fold metrics
             fold_results = self.results.get(model_name, [])
             if fold_results:
                 train_rmse_list = [fold['train_metrics']['rmse'] for fold in fold_results]
@@ -1030,7 +944,6 @@ class AQIForecastingSystem:
                 train_mape_list = [fold['train_metrics']['mape'] for fold in fold_results]
                 test_mape_list = [fold['test_metrics']['mape'] for fold in fold_results]
 
-                # Calculate averages
                 avg_train_rmse = np.mean(train_rmse_list)
                 avg_test_rmse = np.mean(test_rmse_list)
                 avg_train_mae = np.mean(train_mae_list)
@@ -1042,7 +955,6 @@ class AQIForecastingSystem:
                 avg_train_mape = np.mean(train_mape_list)
                 avg_test_mape = np.mean(test_mape_list)
 
-                # Calculate training set size progression
                 train_sizes = [fold['train_size'] for fold in fold_results]
                 avg_train_size = np.mean(train_sizes)
                 final_train_size = train_sizes[-1] if train_sizes else 0
@@ -1052,7 +964,6 @@ class AQIForecastingSystem:
                 avg_train_mape = avg_test_mape = 0
                 avg_train_size = final_train_size = 0
 
-            # Check quality criteria
             std_check = std_pred > 3
             feature_count = len(self.selected_features)
 
@@ -1074,8 +985,6 @@ class AQIForecastingSystem:
                 'std_check_passed': std_check,
                 'prediction_quality': 'Good' if std_check else 'Poor'
             }
-
-        # Evaluate ensemble models
         if hasattr(self, 'ensemble_predictions'):
             for ensemble_name in self.ensemble_predictions.keys():
                 if not self.ensemble_predictions.get(ensemble_name):
@@ -1083,8 +992,6 @@ class AQIForecastingSystem:
 
                 preds = np.array(self.ensemble_predictions[ensemble_name])
                 std_pred = np.std(preds)
-
-                # Aggregate fold metrics for ensemble
                 fold_results = self.ensemble_results.get(ensemble_name, [])
                 if fold_results:
                     test_rmse_list = [fold['test_metrics']['rmse'] for fold in fold_results]
@@ -1136,21 +1043,20 @@ class AQIForecastingSystem:
         print(f"AQI FORECASTING SYSTEM PERFORMANCE REPORT - {self.horizon_hours}H HORIZON")
         print("="*80)
 
-        print(f"\n📋 Configuration:")
-        print(f"   • Forecast horizon: {self.horizon_hours} hours")
-        print(f"   • Target column: {self.target_column}")
-        print(f"   • Selected features: {len(self.selected_features)}")
-        print(f"   • Individual models: {len(self.model_configs)}")
-        print(f"   • Ensemble models: {len(self.ensemble_configs)}")
-        print(f"   • Validation method: Expanding Window")
-        print(f"   • Dataset shape: {self.df.shape}")
+        print(f"\n Configuration:")
+        print(f"   Forecast horizon: {self.horizon_hours} hours")
+        print(f"   Target column: {self.target_column}")
+        print(f"   Selected features: {len(self.selected_features)}")
+        print(f"   Individual models: {len(self.model_configs)}")
+        print(f"   Ensemble models: {len(self.ensemble_configs)}")
+        print(f"   Validation method: Sliding Window")
+        print(f"   Dataset shape: {self.df.shape}")
 
-        print(f"\n🎯 Quality Checks:")
+        print(f"\nQuality Checks:")
         print(f"  Standard deviation > 3 (prevents flat predictions)")
-        print(f"  Expanding window validation (no future leakage)")
+        print(f"  Sliding window validation (no future leakage)")
         print(f"  Cross-validated feature selection")
 
-        # Individual model performance summary
         print(f"\nIndividual Model Performance:")
         print("-" * 80)
 
@@ -1161,23 +1067,22 @@ class AQIForecastingSystem:
             results = evaluation_results[model_name]
 
             print(f"\n {model_name}:")
-            print(f"   🔹 Train Metrics:")
-            print(f"      • MSE  = {results.get('avg_train_mse', 0):.3f}")
-            print(f"      • RMSE = {results.get('avg_train_rmse', 0):.3f}")
-            print(f"      • MAE  = {results.get('avg_train_mae', 0):.3f}")
-            print(f"      • MAPE = {results.get('avg_train_mape', 0):.2f}%")
-            print(f"      • R²   = {results.get('avg_train_r2', 0):.3f}")
+            print(f"    Train Metrics:")
+            print(f"       MSE  = {results.get('avg_train_mse', 0):.3f}")
+            print(f"       RMSE = {results.get('avg_train_rmse', 0):.3f}")
+            print(f"       MAE  = {results.get('avg_train_mae', 0):.3f}")
+            print(f"       MAPE = {results.get('avg_train_mape', 0):.2f}%")
+            print(f"       R²   = {results.get('avg_train_r2', 0):.3f}")
 
-            print(f"   🔸 Test Metrics:")
-            print(f"      • MSE  = {results.get('avg_test_mse', 0):.3f}")
-            print(f"      • RMSE = {results.get('avg_test_rmse', 0):.3f}")
-            print(f"      • MAE  = {results.get('avg_test_mae', 0):.3f}")
-            print(f"      • MAPE = {results.get('avg_test_mape', 0):.2f}%")
-            print(f"      • R²   = {results.get('avg_test_r2', 0):.3f}")
-            print(f"      • STD  = {results.get('std_pred', 0):.3f}")
-            print(f"      • Quality = {results.get('prediction_quality', 'N/A')}")
+            print(f"   Test Metrics:")
+            print(f"       MSE  = {results.get('avg_test_mse', 0):.3f}")
+            print(f"       RMSE = {results.get('avg_test_rmse', 0):.3f}")
+            print(f"       MAE  = {results.get('avg_test_mae', 0):.3f}")
+            print(f"       MAPE = {results.get('avg_test_mape', 0):.2f}%")
+            print(f"       R²   = {results.get('avg_test_r2', 0):.3f}")
+            print(f"       STD  = {results.get('std_pred', 0):.3f}")
+            print(f"       Quality = {results.get('prediction_quality', 'N/A')}")
 
-        # Ensemble model performance summary
         if hasattr(self, 'ensemble_results'):
             print(f"\n🔗 Ensemble Model Performance:")
             print("-" * 80)
@@ -1188,7 +1093,7 @@ class AQIForecastingSystem:
 
                 results = evaluation_results[ensemble_name]
 
-                print(f"\n🏆 {ensemble_name} (Components: {', '.join(self.ensemble_configs[ensemble_name])}):")
+                print(f"\n {ensemble_name} (Components: {', '.join(self.ensemble_configs[ensemble_name])}):")
                 print(f"   MSE={results.get('avg_test_mse', 0):.3f}, "
                       f"RMSE={results.get('avg_test_rmse', 0):.3f}, "
                       f"MAE={results.get('avg_test_mae', 0):.3f}, "
@@ -1197,8 +1102,7 @@ class AQIForecastingSystem:
                       f"STD={results.get('std_pred', 0):.3f}, "
                       f"Quality={results.get('prediction_quality', 'N/A')}")
 
-        # Best performing model
-        print(f"\n🥇 Best Performing Model:")
+        print(f"\nBest Performing Model:")
         print("-" * 80)
 
         best_r2 = -999
@@ -1227,7 +1131,6 @@ class AQIForecastingSystem:
         return evaluation_results
 
     def train_baseline(self):
-        """Train simple baseline models"""
         from sklearn.linear_model import LinearRegression
         from sklearn.ensemble import RandomForestRegressor
         from sklearn.metrics import r2_score, mean_squared_error
@@ -1238,7 +1141,6 @@ class AQIForecastingSystem:
             print(" No features selected! Run feature selection first.")
             return {}
 
-        # Filter features that actually exist in dataframe
         available_features = [f for f in self.selected_features if f in self.df.columns]
         if not available_features:
             print(" No valid feature columns found")
@@ -1246,7 +1148,6 @@ class AQIForecastingSystem:
 
         print(f"   Using {len(available_features)} features")
 
-        # Create clean dataset
         all_cols = available_features + [self.target_column]
         clean_data = self.df[all_cols].dropna()
 
@@ -1256,7 +1157,6 @@ class AQIForecastingSystem:
 
         print(f"   Clean data shape: {clean_data.shape}")
 
-        # Simple temporal split (last 20% as test)
         split_idx = int(0.8 * len(clean_data))
 
         X_train = clean_data[available_features].iloc[:split_idx]
@@ -1266,7 +1166,6 @@ class AQIForecastingSystem:
 
         results = {}
 
-        # Linear Regression
         try:
             lr = LinearRegression()
             lr.fit(X_train, y_train)
@@ -1283,7 +1182,6 @@ class AQIForecastingSystem:
             results['linear_r2'] = -999
             results['linear_rmse'] = 999
 
-        # Random Forest
         try:
             rf = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
             rf.fit(X_train, y_train)
@@ -1296,7 +1194,6 @@ class AQIForecastingSystem:
             results['rf_r2'] = rf_r2
             results['rf_rmse'] = rf_rmse
 
-            # Show feature importance
             if hasattr(rf, 'feature_importances_'):
                 feature_imp = list(zip(available_features, rf.feature_importances_))
                 feature_imp.sort(key=lambda x: x[1], reverse=True)
@@ -1308,7 +1205,6 @@ class AQIForecastingSystem:
             results['rf_r2'] = -999
             results['rf_rmse'] = 999
 
-        # Naive baseline
         naive_pred = np.full(len(y_test), y_train.mean())
         naive_r2 = r2_score(y_test, naive_pred)
         naive_rmse = np.sqrt(mean_squared_error(y_test, naive_pred))
@@ -1321,60 +1217,270 @@ class AQIForecastingSystem:
             'naive_rmse': naive_rmse,
             'target_std': y_test.std(),
             'target_mean': y_test.mean(),
-            'n_features': len(available_features),
-            'n_train': len(y_train),
-            'n_test': len(y_test)
+            'test_size': len(y_test),
+            'train_size': len(y_train)
         })
 
+        print(f"   Baseline evaluation completed for {self.horizon_hours}h horizon")
         return results
 
-    def run_pipeline(self, max_features=15, train_size=5*7*24, test_size=3*24, step_size=3*24):
-        """Execute the complete forecasting pipeline"""
-        print(f" Starting AQI Forecasting Pipeline for {self.horizon_hours}h horizon...")
-
-        # Step 1: Validate data quality
-        quality_issues = self.validate_data_quality()
-        if quality_issues:
-            print(" Halting pipeline due to data quality issues.")
-            return None
-
-        # Step 2: Feature selection
-        feature_selection_details = self.feature_selection_pipeline(max_features=max_features)
-        if not self.selected_features:
-            print(" Halting pipeline due to lack of selected features.")
-            return None
-
-        # Step 3: Check for data leakage
-        leakage_results = self.check_data_leakage()
-        if leakage_results.get('high_correlation_features') or leakage_results.get('suspicious_name_features'):
-            print(" Halting pipeline due to potential data leakage.")
-            return None
-
-        # Step 4: Initialize models
-        self.initialize_models()
-
-        # Step 5: Expanding window validation
-        self.expanding_window_validation(train_size=train_size, test_size=test_size, step_size=step_size)
-
-        # Step 6: Train final models
-        self.train_final_models()
-
-        # Step 7: Save models
-        save_path = self.save_models()
-
-        # Step 8: Generate report
-        evaluation_results = self.generate_report()
-
-        print(f"\n All models saved to: {save_path}")
-        print(f" Pipeline completed successfully!")
-
-        return {
-            'evaluation_results': evaluation_results,
-            'feature_selection_details': feature_selection_details,
-            'leakage_results': leakage_results,
-            'model_save_path': save_path,
-            'selected_features': self.selected_features,
-            'individual_predictions': self.predictions,
-            'ensemble_predictions': self.ensemble_predictions,
-            'full_data': self.df
+    def run_complete_pipeline(self, max_features=15, train_baseline=True, save_models=True):
+        
+        print(f"\n Starting complete AQI forecasting pipeline for {self.horizon_hours}h horizon")
+        print("="*80)
+        
+        pipeline_results = {
+            'horizon_hours': self.horizon_hours,
+            'target_column': self.target_column,
+            'dataset_shape': self.df.shape,
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
+        
+        try:
+            print("\nData Quality Validation")
+            quality_issues = self.validate_data_quality()
+            pipeline_results['data_quality_issues'] = quality_issues
+            
+            if quality_issues:
+                print(" Data quality issues found - proceeding with caution")
+            
+            print("\n Feature Selection Pipeline")
+            feature_selection_results = self.feature_selection_pipeline(max_features=max_features)
+            pipeline_results['feature_selection'] = feature_selection_results
+            
+            if not self.selected_features:
+                print("Feature selection failed - cannot proceed")
+                return pipeline_results
+            
+            print("\n Data Leakage Detection")
+            leakage_results = self.check_data_leakage()
+            pipeline_results['leakage_check'] = leakage_results
+            
+            print("\nModel Initialization")
+            self.initialize_models()
+            pipeline_results['models_initialized'] = list(self.model_configs.keys())
+            
+            if train_baseline:
+                print("\nBaseline Model Training")
+                baseline_results = self.train_baseline()
+                pipeline_results['baseline_results'] = baseline_results
+            
+            print("\n Sliding Window Cross-Validation")
+            self.sliding_window_validation()
+            
+            print("\nFinal Model Training")
+            self.train_final_models()
+
+            print("\nPerformance Evaluation")
+            evaluation_results = self.generate_report()
+            pipeline_results['evaluation_results'] = evaluation_results
+            
+            if save_models:
+                print("\n Saving Models")
+                save_path = self.save_models()
+                pipeline_results['models_saved_to'] = save_path
+            
+            pipeline_results['status'] = 'completed'
+            pipeline_results['success'] = True
+            
+            print(f"\n Pipeline completed successfully for {self.horizon_hours}h horizon!")
+            
+        except Exception as e:
+            print(f"\n Pipeline failed: {str(e)}")
+            pipeline_results['status'] = 'failed'
+            pipeline_results['success'] = False
+            pipeline_results['error'] = str(e)
+        
+        return pipeline_results
+
+    def predict_new_data(self, new_data):
+        if not hasattr(self, 'deployment_models') or not self.deployment_models:
+            print(" No trained models found. Please run the training pipeline first.")
+            return None
+        
+        if not self.selected_features:
+            print(" No selected features found. Please run feature selection first.")
+            return None
+        
+        print(f" Making predictions for {self.horizon_hours}h horizon...")
+        
+        missing_features = [f for f in self.selected_features if f not in new_data.columns]
+        if missing_features:
+            print(f" Missing features in new data: {missing_features}")
+            available_features = [f for f in self.selected_features if f in new_data.columns]
+            if not available_features:
+                print(" No required features found in new data")
+                return None
+            print(f"   Using {len(available_features)} available features")
+            feature_subset = available_features
+        else:
+            feature_subset = self.selected_features
+        
+        X_new = new_data[feature_subset].copy()
+        
+        X_new = X_new.fillna(method='ffill').fillna(method='bfill')
+        for col in X_new.columns:
+            if X_new[col].isna().any():
+                X_new[col].fillna(X_new[col].median(), inplace=True)
+        
+        predictions = {}
+        
+        # Individual model predictions
+        for model_name, model in self.deployment_models.items():
+            if model is None:
+                continue
+                
+            try:
+                pred = model.predict(X_new)
+                predictions[model_name] = pred
+                print(f"    {model_name}: {len(pred)} predictions")
+                
+            except Exception as e:
+                print(f"   Error with {model_name}: {str(e)}")
+                continue
+        
+        # Ensemble predictions
+        if hasattr(self, 'ensemble_configs'):
+            for ensemble_name, component_models in self.ensemble_configs.items():
+                available_preds = []
+                for model_name in component_models:
+                    if model_name in predictions:
+                        available_preds.append(predictions[model_name])
+                
+                if len(available_preds) >= 2:  
+                    ensemble_pred = np.mean(available_preds, axis=0)
+                    predictions[ensemble_name] = ensemble_pred
+                    print(f"   {ensemble_name}: {len(ensemble_pred)} predictions")
+                else:
+                    print(f"   {ensemble_name}: Insufficient models ({len(available_preds)}/3)")
+        
+        return predictions
+
+    def get_feature_importance(self, top_k=10):
+        if not hasattr(self, 'deployment_models') or not self.deployment_models:
+            print(" No trained models found.")
+            return {}
+        
+        print(f" Extracting feature importance for {self.horizon_hours}h horizon...")
+        
+        importance_results = {}
+        
+        for model_name, model in self.deployment_models.items():
+            if model is None:
+                continue
+            
+            try:
+                if hasattr(model, 'feature_importances_'):
+                    importances = model.feature_importances_
+                    feature_importance = list(zip(self.selected_features, importances))
+                    feature_importance.sort(key=lambda x: x[1], reverse=True)
+                    importance_results[model_name] = feature_importance[:top_k]
+                    
+                elif hasattr(model, 'get_feature_importance'):
+                    importances = model.get_feature_importance()
+                    feature_importance = list(zip(self.selected_features, importances))
+                    feature_importance.sort(key=lambda x: x[1], reverse=True)
+                    importance_results[model_name] = feature_importance[:top_k]
+                    
+                elif model_name == 'XGBoost' and hasattr(model, 'feature_importances_'):
+                    importances = model.feature_importances_
+                    feature_importance = list(zip(self.selected_features, importances))
+                    feature_importance.sort(key=lambda x: x[1], reverse=True)
+                    importance_results[model_name] = feature_importance[:top_k]
+                    
+                elif model_name == 'LightGBM':
+                    if hasattr(model, 'feature_importances_'):
+                        importances = model.feature_importances_
+                    elif hasattr(model, 'feature_importance'):
+                        importances = model.feature_importance()
+                    else:
+                        continue
+                    
+                    feature_importance = list(zip(self.selected_features, importances))
+                    feature_importance.sort(key=lambda x: x[1], reverse=True)
+                    importance_results[model_name] = feature_importance[:top_k]
+                
+                print(f"    {model_name}: Top feature - {importance_results[model_name][0][0]}")
+                
+            except Exception as e:
+                print(f"    Error extracting importance from {model_name}: {str(e)}")
+                continue
+        
+        return importance_results
+
+    def create_prediction_summary(self, predictions):
+        if not predictions:
+            print(" No predictions provided")
+            return pd.DataFrame()
+        
+        print(" Creating prediction summary...")
+        
+        summary_data = []
+        
+        for model_name, pred_values in predictions.items():
+            if len(pred_values) == 0:
+                continue
+                
+            summary_data.append({
+                'model': model_name,
+                'mean_prediction': np.mean(pred_values),
+                'median_prediction': np.median(pred_values),
+                'std_prediction': np.std(pred_values),
+                'min_prediction': np.min(pred_values),
+                'max_prediction': np.max(pred_values),
+                'q25_prediction': np.percentile(pred_values, 25),
+                'q75_prediction': np.percentile(pred_values, 75),
+                'prediction_count': len(pred_values),
+                'model_type': 'ensemble' if model_name in getattr(self, 'ensemble_configs', {}) else 'individual'
+            })
+        
+        summary_df = pd.DataFrame(summary_data)
+        
+        if not summary_df.empty:
+            summary_df = summary_df.sort_values('mean_prediction', ascending=False)
+            print(f"    Created summary for {len(summary_df)} models")
+        
+        return summary_df
+
+    def export_predictions(self, predictions, output_path=None, include_metadata=True):
+        if not predictions:
+            print(" No predictions to export")
+            return None
+        
+        pred_df = pd.DataFrame(predictions)
+        
+        if output_path is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_path = f"aqi_predictions_{self.horizon_hours}h_{timestamp}.csv"
+        
+        try:
+            pred_df.to_csv(output_path, index=False)
+            print(f" Predictions exported to: {output_path}")
+            
+            if include_metadata:
+                metadata_path = output_path.replace('.csv', '_metadata.json')
+                
+                metadata = {
+                    'horizon_hours': self.horizon_hours,
+                    'target_column': self.target_column,
+                    'selected_features': self.selected_features,
+                    'model_names': list(predictions.keys()),
+                    'prediction_count': len(pred_df),
+                    'export_timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    'prediction_summary': {
+                        'models_used': len(predictions),
+                        'ensemble_models': len([m for m in predictions.keys() if m in getattr(self, 'ensemble_configs', {})]),
+                        'individual_models': len([m for m in predictions.keys() if m not in getattr(self, 'ensemble_configs', {})])
+                    }
+                }
+                
+                with open(metadata_path, 'w') as f:
+                    json.dump(metadata, f, indent=2)
+                
+                print(f" Metadata exported to: {metadata_path}")
+            
+            return output_path
+            
+        except Exception as e:
+            print(f"Error exporting predictions: {str(e)}")
+            return None
