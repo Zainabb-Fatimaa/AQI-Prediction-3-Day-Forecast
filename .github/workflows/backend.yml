@@ -2,10 +2,8 @@ name: Update Models and Data
 
 on:
   schedule:
-    # Run every hour for data updates
     - cron: '0 * * * *'
-    # Run every 14 days for model updates (2 AM UTC on 1st and 15th)
-    - cron: '0 2 1,15 * *'
+    - cron: '0 2 * * *'
   workflow_dispatch:
   push:
     branches: [ main ]
@@ -64,7 +62,7 @@ jobs:
 
   update-models:
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' && github.event.schedule == '0 2 1,15 * *' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'schedule' && github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout repository
