@@ -724,7 +724,7 @@ class AQIForecastingSystem:
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        save_dir = os.path.join(self.model_save_path, f"aqi_models_{self.horizon_hours}h_{timestamp}")
+        save_dir = os.path.join(self.model_save_path, f"aqi_models_{self.horizon_hours}h")
         os.makedirs(save_dir, exist_ok=True)
 
         models_dir = os.path.join(save_dir, "individual_models")
