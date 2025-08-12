@@ -3,27 +3,27 @@
     "model_type": "ExtraTrees",
     "model_file": "model_24h.pkl",
     "model_format": "pkl",
-    "version": 17,
+    "version": 18,
     "features_count": 10,
-    "updated_at": "2025-08-11T03:47:14.340139",
+    "updated_at": "2025-08-12T03:21:27.003805",
     "description": "The best model for 24h is ExtraTrees"
   },
   "48": {
     "model_type": "ExtraTrees",
     "model_file": "model_48h.pkl",
     "model_format": "pkl",
-    "version": 16,
+    "version": 17,
     "features_count": 15,
-    "updated_at": "2025-08-11T03:47:21.250091",
+    "updated_at": "2025-08-12T03:21:37.462500",
     "description": "The best model for 48h is ExtraTrees"
   },
   "72": {
     "model_type": "ExtraTrees",
     "model_file": "model_72h.pkl",
     "model_format": "pkl",
-    "version": 16,
+    "version": 17,
     "features_count": 8,
-    "updated_at": "2025-08-11T03:47:27.936260",
+    "updated_at": "2025-08-12T03:21:47.803265",
     "description": "The best model for 72h is ExtraTrees"
   }
 }
