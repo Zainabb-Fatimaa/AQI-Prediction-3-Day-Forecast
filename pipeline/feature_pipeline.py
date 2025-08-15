@@ -1,7 +1,7 @@
 import os
 import hopsworks
 import pandas as pd
-from aqi_preprocessor import AQIDataPreprocessor 
+from aqi_preprocessor import AQIDataPreprocessor
 
 def get_hopsworks_project():
     """Connects to Hopsworks and returns the project object."""
@@ -29,44 +29,55 @@ def create_feature_groups(fs):
             )
 
 def run_feature_pipeline():
-    project = get_hopsworks_project()
+    project=get_hopsworks_project()
     fs = project.get_feature_store()
     create_feature_groups(fs)
-    
+
     fg_old = fs.get_feature_group(name="karachi_raw_data_store", version=1)
     raw_df = fg_old.read()
-    
+
     for horizon in [24, 48, 72]:
         print(f"\n--- Processing for {horizon}h horizon ---")
-        
+
+        fg = fs.get_feature_group(name=f"aqi_features_{horizon}h_prod", version=1)
+        target_schema_cols = [feature.name.lower() for feature in fg.schema]
+        print(f"Target schema columns for {horizon}h horizon: {target_schema_cols}")
+
+
         preprocessor = AQIDataPreprocessor(dataframe=raw_df)
         success = preprocessor.run_full_preprocessing(
             dataframe=raw_df,
-            forecast_horizon=horizon
+            forecast_horizon=horizon,
+            target_schema_columns=target_schema_cols 
         )
-        
+
         if success:
             processed_data = preprocessor.get_processed_data()
             if processed_data and 'full_data' in processed_data:
                 features_df = processed_data['full_data'].copy()
                 features_df["event_time"] = pd.to_datetime(features_df.index)
                 features_df['unique_id'] = range(len(features_df))
-                
+
                 fg = fs.get_feature_group(name=f"aqi_features_{horizon}h_prod", version=1)
-                
+
                 schema_cols = [feature.name for feature in fg.schema]
-                
+                features_df.columns = features_df.columns.str.lower()
+
+                print(f"\nColumns in processed DataFrame (lowercase): {features_df.columns.tolist()}")
+                print(f"Columns in Feature Group schema: {schema_cols}")
+
+
                 matching_cols = [col for col in features_df.columns if col in schema_cols]
                 dropped_cols = [col for col in features_df.columns if col not in schema_cols]
-                
+
                 if dropped_cols:
                     print(f"Dropping {len(dropped_cols)} columns not in schema: {dropped_cols[:5]}{'...' if len(dropped_cols) > 5 else ''}")
-                
+
                 features_df = features_df[matching_cols]
                 print(f"Final DataFrame shape after schema alignment: {features_df.shape}")
-                
+
                 fg.insert(features_df, write_options={"wait_for_job": True})
                 print(f"Inserted {len(features_df)} rows into '{fg.name}'")
-                
+
 if __name__ == "__main__":
     run_feature_pipeline()
