@@ -1,4 +1,4 @@
-# AirLens - Smart Air Quality Companion 🌬️
+# AirLens - Smart Air Quality Companion 
 
 [![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.68.0+-green.svg)](https://fastapi.tiangolo.com/)
@@ -6,19 +6,15 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## 📋 Table of Contents
+##  Table of Contents
 - [Overview](#overview)
 - [Key Features](#key-features)
-- [System Architecture](#system-architecture)
-- [Getting Started](#getting-started)
 - [API Documentation](#api-documentation)
 - [Data Sources](#data-sources)
 - [Model Performance](#model-performance)
 - [Deployment](#deployment)
-- [Contributing](#contributing)
-- [Future Enhancements](#future-enhancements)
 
-## 🌟 Overview
+##  Overview
 
 AirLens is a comprehensive air quality monitoring and prediction platform that provides real-time AQI tracking and AI-powered 72-hour forecasts for major Pakistani cities. Built with FastAPI backend and Streamlit frontend, it combines advanced machine learning with an intuitive user interface to deliver actionable air quality insights.
 
@@ -26,9 +22,9 @@ AirLens is a comprehensive air quality monitoring and prediction platform that p
 **Prediction Horizons:** 24h, 48h, 72h  
 **Data Sources:** OpenMeteo, IQAir, AQICN, OpenWeather APIs
 
-## ✨ Key Features
+##  Key Features
 
-### 🎯 Frontend (Streamlit)
+###  Frontend (Streamlit)
 - **Live Dashboard** - Interactive real-time AQI monitoring with high-quality charts
 - **AI Predictions** - 72-hour AQI forecasts with hourly resolution
 - **City Comparison** - Multi-city AQI comparison with live ranking
@@ -36,38 +32,38 @@ AirLens is a comprehensive air quality monitoring and prediction platform that p
 - **Alert System** - Real-time warnings for unhealthy air quality levels
 - **Responsive Design** - Mobile-first design with adaptive layouts
 
-### ⚡ Backend (FastAPI)
+###  Backend (FastAPI)
 - **RESTful API** - Modular endpoints for forecasts, historical data, and health monitoring
 - **ML Model Integration** - Pre-trained models for multi-horizon predictions
 - **Automated Data Pipeline** - Real-time data ingestion and processing
 - **Security Features** - Rate limiting, input validation, CORS protection
 - **Performance Optimized** - <200MB memory usage with local model storage
 
-### 🔄 CI/CD Pipeline
+###  CI/CD Pipeline
 - **Daily Data Collection** - Automated data ingestion at 3 AM UTC
 - **Feature Processing** - Daily feature engineering pipeline
 - **Model Training** - Daily model retraining with new data
 - **Hourly Updates** - Real-time data updates every hour
 - **Automated Deployment** - GitHub Actions integration
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Prerequisites
 - Python 3.9+
 - Docker & Docker Compose
 - Git
 
-## 📖 API Documentation
+##  API Documentation
 
 ### Core Endpoints
 
-#### 🔍 Health Check
+####  Health Check
 ```http
 GET /
 ```
 Returns service status and loaded models count.
 
-#### 🎯 Get Forecast
+####  Get Forecast
 ```http
 GET /forecast?horizon=24
 ```
@@ -84,26 +80,26 @@ GET /forecast?horizon=24
 }
 ```
 
-#### 📊 Hourly Forecast
+####  Hourly Forecast
 ```http
 GET /forecast/hourly
 ```
 Returns hour-by-hour predictions for the next 72 hours.
 
-#### 📈 Historical Data
+####  Historical Data
 ```http
 GET /historical/Karachi?days=7
 ```
 **Parameters:**
 - `days`: 1-21 days of historical data
 
-#### 🌍 Available Locations
+####  Available Locations
 ```http
 GET /locations
 ```
 Returns list of supported cities with current AQI readings.
 
-#### 📋 Dashboard Overview
+####  Dashboard Overview
 ```http
 GET /dashboard/overview
 ```
@@ -114,7 +110,7 @@ Returns comprehensive analytics including trends and weekly averages.
 - Health check: 20 requests/minute
 - Lightweight operations: 15 requests/minute
 
-## 📊 Data Sources
+##  Data Sources
 
 ### Primary Pipeline (Training Data)
 - **OpenMeteo API**: 92 days of historical data
@@ -132,7 +128,7 @@ Returns comprehensive analytics including trends and weekly averages.
 - **Weather**: Temperature, humidity, precipitation, wind patterns
 - **Calculated**: AQI values using EPA breakpoint formula
 
-## 📈 Model Performance
+##  Model Performance
 
 ### Current Results (Tree-Based Models)
 
@@ -156,7 +152,7 @@ Returns comprehensive analytics including trends and weekly averages.
 - **Very Unhealthy**: 201-300
 - **Hazardous**: 300+
 
-## 🐳 Deployment
+##  Deployment
 
 ### Docker Deployment
 
@@ -184,14 +180,14 @@ CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0
 - **Monitoring**: Built-in health checks and logging
 - **Security**: Rate limiting, input validation, CORS protection
 
-## 🤝 Acknowledgments
+##  Acknowledgments
 
 - OpenMeteo for comprehensive historical weather data
 - IQAir for real-time air quality monitoring
 - Hopsworks for feature store and MLOps platform
 - EPA for AQI calculation standards and breakpoints
 
-## 📞 Support
+##  Support
 
 For questions, issues, or contributions:
 - Open an issue on GitHub
