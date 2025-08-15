@@ -3,7 +3,6 @@ import streamlit as st
 import os
 
 API_BASE_URL = os.getenv("BACKEND_URL", "http://backend:8000")
-# API_BASE_URL =  "http://backend:8000"
 
 def fetch_api_data(endpoint):
     try:

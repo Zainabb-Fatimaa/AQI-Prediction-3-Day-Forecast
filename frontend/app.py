@@ -28,7 +28,6 @@ if 'last_hazard_check' not in st.session_state:
     st.session_state.last_hazard_check = 0
 
 API_BASE_URL = os.getenv("BACKEND_URL", "http://backend:8000")
-# API_BASE_URL = "http://localhost:8000"
 try:
     current_aqi, is_hazardous = check_and_alert_hazardous_aqi(API_BASE_URL)
     if current_aqi is not None:

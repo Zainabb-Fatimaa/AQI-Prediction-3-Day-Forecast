@@ -5,8 +5,7 @@ import plotly.express as px
 from datetime import datetime
 import os
 
-API_URL = os.getenv("BACKEND_URL", "http://backend:8000") + "/forecast/hourly" 
-# API_URL = "http://localhost:8000/forecast/hourly" 
+API_URL = os.getenv("BACKEND_URL", "http://backend:8000") + "/forecast/hourly"  
 
 def get_hourly_forecast():
     try:
