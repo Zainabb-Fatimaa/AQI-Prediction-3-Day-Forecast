@@ -3,7 +3,7 @@ name: AQI Model Training Pipeline
 on:
   workflow_dispatch: 
   schedule:
-    - cron: '0 5 * * *' 
+    - cron: '0 7 * * *' 
 
 jobs:
   run-training-pipeline:

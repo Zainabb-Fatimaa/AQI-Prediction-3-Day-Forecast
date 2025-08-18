@@ -14,7 +14,7 @@ warnings.filterwarnings('ignore')
 
 def extract_max_window_from_features(feature_names: List[str]) -> int:
     max_window = 0
-    window_pattern = r'(\d+)h'  
+    window_pattern = r'(\d+)h'
 
     for feature in feature_names:
         matches = re.findall(window_pattern, feature)
@@ -27,7 +27,7 @@ def extract_max_window_from_features(feature_names: List[str]) -> int:
 def smart_drop_initial_rows(df: pd.DataFrame,
                            feature_columns: Optional[List[str]] = None,
                            min_drop_hours: int = 0) -> Tuple[pd.DataFrame, int]:
-   
+
     if df.empty:
         print("Warning: Empty dataframe provided.")
         return df, 0
@@ -64,7 +64,7 @@ class AQIDataPreprocessor:
 
     def __init__(self, file_path=None, dataframe=None):
         self.file_path = file_path
-        self.df = dataframe 
+        self.df = dataframe
         self.processed_df = None
         self.feature_columns = []
         self.target_column = 'aqi'
@@ -86,7 +86,7 @@ class AQIDataPreprocessor:
         print("="*50)
 
         if dataframe is not None:
-            self.df = dataframe.copy() 
+            self.df = dataframe.copy()
             print("Using provided DataFrame.")
         elif file_path:
             self.file_path = file_path
@@ -104,15 +104,15 @@ class AQIDataPreprocessor:
             self.create_sample_data()
 
         if self.df is not None:
-             self.df.columns = self.df.columns.str.lower().str.replace('.', '_', regex=False) 
+             self.df.columns = self.df.columns.str.lower().str.replace('.', '_', regex=False)
              self.df.rename(columns={
-                 'pm2_5': 'pm2_5', 
-                 'pm10': 'pm10', 
-                 'co': 'co', 
-                 'so2': 'so2', 
-                 'o3': 'o3', 
+                 'pm2_5': 'pm2_5',
+                 'pm10': 'pm10',
+                 'co': 'co',
+                 'so2': 'so2',
+                 'o3': 'o3',
                  'no2': 'no2',
-                 'aqi': 'aqi' 
+                 'aqi': 'aqi'
              }, inplace=True)
 
              self.inspect_data()
@@ -143,7 +143,7 @@ class AQIDataPreprocessor:
         print("\nBasic statistics:")
         print(self.df.describe())
 
-        self.datetime_column = None 
+        self.datetime_column = None
         for col in self.df.columns:
             if 'date' in col.lower() or 'time' in col.lower():
                 try:
@@ -159,9 +159,9 @@ class AQIDataPreprocessor:
         else:
             print("\nNo suitable datetime column found.")
 
-        self.target_column = None 
+        self.target_column = None
         for col in self.df.columns:
-            if 'aqi' in col.lower(): 
+            if 'aqi' in col.lower():
                 self.target_column = col
                 break
 
@@ -266,7 +266,7 @@ class AQIDataPreprocessor:
                 Q3 = self.processed_df[col].quantile(0.75)
 
             IQR = Q3 - Q1
-            lower_bound = Q1 - 3 * IQR  
+            lower_bound = Q1 - 3 * IQR
             upper_bound = Q3 + 3 * IQR
 
             outliers = (self.processed_df[col] < lower_bound) | (self.processed_df[col] > upper_bound)
@@ -356,7 +356,7 @@ class AQIDataPreprocessor:
             if pollutant in self.processed_df.columns:
                 for lag in lag_periods:
                     self.processed_df[f'{pollutant}_lag_{lag}h'] = self.processed_df[pollutant].shift(lag)
-                    
+
         for weather_var in self.weather_columns:
             if weather_var in self.processed_df.columns:
                 for lag in lag_periods:
@@ -376,10 +376,12 @@ class AQIDataPreprocessor:
         if self.target_column and self.target_column in self.processed_df.columns:
             aqi_rolling_windows = [24, 48, 72]
             for window in aqi_rolling_windows:
-                # Create rolling features on a series that is already lagged by min_lag
                 lagged_aqi = self.processed_df[self.target_column].shift(min_lag)
                 self.processed_df[f'{self.target_column}_rolling_std_{window}h_lag{min_lag}h'] = lagged_aqi.rolling(window=window).std()
                 self.processed_df[f'{self.target_column}_rolling_max_{window}h_lag{min_lag}h'] = lagged_aqi.rolling(window=window).max()
+                print(f"  Created rolling feature: {self.target_column}_rolling_std_{window}h_lag{min_lag}h")
+                print(f"  Created rolling feature: {self.target_column}_rolling_max_{window}h_lag{min_lag}h")
+
 
         pollutant_rolling = {
             'pm10': [24],
@@ -395,6 +397,8 @@ class AQIDataPreprocessor:
                 for window in windows:
                     lagged_pollutant = self.processed_df[pollutant].shift(min_lag)
                     self.processed_df[f'{pollutant}_rolling_std_{window}h_lag{min_lag}h'] = lagged_pollutant.rolling(window=window).std()
+                    print(f"  Created rolling feature: {pollutant}_rolling_std_{window}h_lag{min_lag}h")
+
 
         print(f"Created rolling features on data lagged by {min_lag}h")
 
@@ -405,13 +409,11 @@ class AQIDataPreprocessor:
         print("CREATING INTERACTION FEATURES")
         print("="*50)
 
-        # Temperature and humidity interaction (heat index proxy)
         if 'temperature' in self.processed_df.columns and 'humidity' in self.processed_df.columns:
             self.processed_df['temp_humidity_interaction'] = (
                 self.processed_df['temperature'] * self.processed_df['humidity'] / 100
             )
 
-        # Wind speed and direction features
         if 'wind_speed' in self.processed_df.columns and 'wind_direction' in self.processed_df.columns:
             self.processed_df['wind_u'] = (
                 self.processed_df['wind_speed'] * np.cos(np.radians(self.processed_df['wind_direction']))
@@ -456,6 +458,10 @@ class AQIDataPreprocessor:
          features_to_drop = []
 
          for col in numeric_cols:
+             if self.target_schema_columns and col in self.target_schema_columns:
+                 print(f"  Skipping low variance check for '{col}' as it's in the target schema.")
+                 continue
+
              variance = self.processed_df[col].var(skipna=True)
              if pd.isna(variance) or variance < threshold:
                  features_to_drop.append(col)
@@ -494,6 +500,10 @@ class AQIDataPreprocessor:
 
             if highly_correlated_cols:
                 for corr_col in highly_correlated_cols:
+                    if self.target_schema_columns and column in self.target_schema_columns:
+                         print(f"  Skipping correlation check for '{column}' as it's in the target schema.")
+                         continue
+
                     if column not in features_to_drop_corr:
                         features_to_drop_corr.add(column)
                         self.removed_features['high_correlation'].append(column)
@@ -656,6 +666,7 @@ class AQIDataPreprocessor:
         print("="*80)
         print("STARTING FULL PREPROCESSING PIPELINE")
         print("="*80)
+        self.target_schema_columns = target_schema_columns
 
         if not self.load_data(dataframe=dataframe):
             return False
@@ -716,7 +727,7 @@ class AQIDataPreprocessor:
                 'y': y_data,
                 'feature_names': valid_X_features,
                 'target_name': self.target_column,
-                'full_data': self.processed_df 
+                'full_data': self.processed_df
             }
         else:
             print("No processed data available. Run preprocessing first.")
