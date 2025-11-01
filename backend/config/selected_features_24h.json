@@ -1,12 +1,12 @@
 [
   "aqi",
-  "no2_rolling_std_24h_lag24h",
   "aqi_48h",
+  "aqi_rolling_max_24h_lag24h",
   "aqi_lag_24h",
-  "aqi_72h",
-  "aqi_lag_72h",
-  "aqi_lag_36h",
+  "no2_rolling_std_24h_lag24h",
+  "co_rolling_std_24h_lag24h",
   "aqi_lag_48h",
   "so2_rolling_std_24h_lag24h",
-  "aqi_lag_120h"
+  "aqi_72h",
+  "aqi_rolling_std_48h_lag24h"
 ]
